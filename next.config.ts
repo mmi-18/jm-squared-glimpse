@@ -1,10 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Required for the Docker/Hetzner deploy: bundles the server runtime into
-  // .next/standalone so the production container only needs Node + a few
-  // copied folders, not the full node_modules tree.
-  output: "standalone",
+  // Note: we do NOT use `output: "standalone"`. The Dockerfile ships the
+  // full node_modules so the Prisma CLI (which has a deep dep tree —
+  // `effect` etc. via @prisma/config) works at container start for
+  // `prisma migrate deploy`.
 
   images: {
     // Allow remote SVGs from the avatar service we use during onboarding.
