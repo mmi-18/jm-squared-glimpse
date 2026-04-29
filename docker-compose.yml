@@ -1,0 +1,68 @@
+# Production docker-compose for the Hetzner host.
+#
+# Lives at /srv/glimpse/docker-compose.yml on the server (NOT used in CI —
+# the GitHub Actions workflow SSHes in and runs `docker compose pull` +
+# `docker compose up -d` against THIS file).
+#
+# Required adjacent files on the server:
+#   - /srv/glimpse/.env          DATABASE_URL, DIRECT_URL, BETTER_AUTH_*,
+#                                NEXT_PUBLIC_SITE_URL  (gitignored;
+#                                placed manually during bring-up)
+#   - /srv/glimpse/uploads/      named volume target — created at bring-up
+#                                with `mkdir -p && chown 1001:1001`
+#
+# Required external Docker network:
+#   - `traefik` (or whatever your Traefik instance is attached to — adjust
+#     the network name and the `traefik.docker.network` label below if it's
+#     different on your host)
+#
+# DNS sanity:
+#   glimpse.jm-squared.com  →  91.99.239.81 (A record, already in place)
+#
+# First-time bring-up (one-time):
+#   1. ssh mario@91.99.239.81
+#   2. mkdir -p /srv/glimpse/uploads && sudo chown 1001:1001 /srv/glimpse/uploads
+#   3. cp this file → /srv/glimpse/docker-compose.yml
+#   4. cp .env (with real secrets) → /srv/glimpse/.env
+#   5. echo $GHCR_PAT | docker login ghcr.io -u mmi-18 --password-stdin
+#      (PAT with read:packages scope — one-time, persists in /root/.docker)
+#   6. cd /srv/glimpse && docker compose up -d
+#   7. Watch logs: docker compose logs -f glimpse
+
+services:
+  glimpse:
+    image: ghcr.io/mmi-18/jm-squared-glimpse:latest
+    container_name: glimpse
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+
+      # HTTPS router — Let's Encrypt cert via the certresolver Traefik is
+      # already configured with. Adjust `letsencrypt` if your resolver name
+      # is different.
+      - "traefik.http.routers.glimpse.rule=Host(`glimpse.jm-squared.com`)"
+      - "traefik.http.routers.glimpse.entrypoints=websecure"
+      - "traefik.http.routers.glimpse.tls=true"
+      - "traefik.http.routers.glimpse.tls.certresolver=letsencrypt"
+      - "traefik.http.services.glimpse.loadbalancer.server.port=3000"
+
+      # Tell Traefik which network to talk to glimpse on (matters when the
+      # service is also attached to a default bridge network).
+      - "traefik.docker.network=traefik"
+
+      # HTTP → HTTPS redirect for anyone hitting the bare domain
+      - "traefik.http.routers.glimpse-http.rule=Host(`glimpse.jm-squared.com`)"
+      - "traefik.http.routers.glimpse-http.entrypoints=web"
+      - "traefik.http.routers.glimpse-http.middlewares=glimpse-redirect"
+      - "traefik.http.middlewares.glimpse-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.glimpse-redirect.redirectscheme.permanent=true"
+
+networks:
+  traefik:
+    external: true
