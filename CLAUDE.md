@@ -56,6 +56,47 @@ AI-agent guard will refuse without explicit user consent — ask Mario, get a
 yes, then re-run with `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=<his exact
 yes message>`.
 
+### Migrating Supabase → Neon (the pattern, in case we do this again)
+
+`scripts/migrate-from-supabase.ts` is the worked example for glimpse —
+ran once on 2026-04-29 to bring 22 users + 12 creator profiles + 6
+startup profiles + 18 posts + 1 message thread + 6 reviews from the old
+Supabase project (`kyvfiihydffryedrftcs`) onto Neon. Idempotent via
+upsert. Safe to re-run.
+
+Recipe for a future Supabase-backed project:
+
+1. **Inventory the source.** Use the Supabase MCP — `list_tables` for
+   row counts + `pg_total_relation_size` for total bytes. The MCP's
+   `execute_sql` truncates around 30 KB, so don't try to dump big
+   tables through it.
+2. **Pull the Supabase service key** from the old project's `.env`
+   (`SUPABASE_SECRET_KEY`). Plus the project URL.
+3. **Add a migration script** that uses `@supabase/supabase-js` (admin
+   client with the service key) to fetch and Prisma to write. Mirror
+   the existing `migrate-from-supabase.ts` shape: one `fetchAll<T>`
+   helper, one upsert loop per table, snake_case → camelCase mapping
+   inline, UUIDs preserved as primary keys.
+4. **For BetterAuth password migration** — Supabase's bcrypt hashes
+   are NOT compatible with BetterAuth's scrypt. Either (a) set every
+   user to a single shared password (cheap, dev-only), or (b) skip
+   passwords and have users reset on first login. We did (a) for
+   glimpse:
+   - Import `hashPassword` from `better-auth/crypto`
+   - Hash the shared password ONCE, reuse for all Account rows
+   - Each User gets one `Account { providerId: "credential",
+     accountId: <email>, password: <hash> }` row
+5. **One enum quirk to watch for.** Prisma enum names can't start
+   with a digit. Schemas like `enum Turnaround { days_1_3 @map("1_3_days"), … }`
+   mean the DB stores `"1_3_days"` but the Prisma client API expects
+   `"days_1_3"`. The migration script needs to translate the DB form
+   → TS form for those specific enum values. Grep schema for `@map`
+   to find them.
+6. **Run, verify row counts match, sign in.** Then smoke-test the
+   live app via `curl /api/auth/sign-in/email`.
+
+Don't commit `SUPABASE_SERVICE_KEY` — it's in `.env`, gitignored.
+
 ## Auth (BetterAuth)
 
 - Server-side: `import { auth, getCurrentUser, requireUser } from "@/lib/auth"`
