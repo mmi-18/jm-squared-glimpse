@@ -70,7 +70,7 @@ jobs:
           script_stop: true
           script: |
             set -e
-            cd /srv/glimpse
+            cd /home/mario/glimpse
 
             # Re-login to GHCR with this run's short-lived token. The
             # workflow's GITHUB_TOKEN is scoped to read:packages on the

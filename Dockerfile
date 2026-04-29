@@ -59,31 +59,33 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-# Non-root user. Same UID/GID Next.js's docker examples use.
-RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
+# Use the `node` user that ships with node:20-alpine (uid 1000, gid 1000).
+# Matching the host's `mario` user (also uid 1000) lets bind-mounted volumes
+# Just Work without manual chown — important because the deploy directory
+# lives under /home/mario/glimpse/ and Mario doesn't have passwordless sudo.
 
 # Public assets aren't part of the standalone output — copy explicitly.
 COPY --from=builder /app/public ./public
 
 # The standalone server bundle ships its own minimal node_modules + server.js.
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 
 # Prisma client output (generated in `deps`) is required at runtime for any
 # query. The `prisma` CLI + migrations folder are required for the
 # `prisma migrate deploy` step the entrypoint runs at container start.
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
-COPY --chown=nextjs:nodejs prisma ./prisma
-COPY --chown=nextjs:nodejs scripts/entrypoint.sh ./entrypoint.sh
+COPY --from=deps --chown=node:node /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=deps --chown=node:node /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=deps --chown=node:node /app/node_modules/prisma ./node_modules/prisma
+COPY --chown=node:node prisma ./prisma
+COPY --chown=node:node scripts/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
 # Filesystem upload target. Mounted from the host as a volume in
 # docker-compose so uploads survive container rebuilds.
-RUN mkdir -p /app/uploads && chown nextjs:nodejs /app/uploads
+RUN mkdir -p /app/uploads && chown node:node /app/uploads
 
-USER nextjs
+USER node
 EXPOSE 3000
 
 # Curl-based liveness probe. Traefik does its own routing healthcheck via
