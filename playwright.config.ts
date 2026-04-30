@@ -46,7 +46,10 @@ export default defineConfig({
     },
     {
       name: "audit",
-      testMatch: /interaction-audit\.spec\.ts/,
+      // Anything ending in -audit.spec.ts (interaction-audit, wizard-audit, …)
+      // OR -behavior.spec.ts (focused behavior verifications). All run under
+      // Kiri's authenticated session via auth-setup.
+      testMatch: /-(audit|behavior)\.spec\.ts$/,
       dependencies: ["auth-setup"],
       use: { ...devices["Desktop Chrome"] },
     },
