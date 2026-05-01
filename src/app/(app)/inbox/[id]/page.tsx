@@ -72,9 +72,14 @@ export default async function ConversationPage({
           >
             <ArrowLeft className="h-4 w-4" />
           </Link>
+          {/* Same pill-shape affordance as TopNav profile link — was
+              previously plain text with hover:opacity-80, which read as
+              decoration. Now obviously clickable: rounded background on
+              hover + larger padding + min-h-[44px] hit target. */}
           <Link
             href={profileHref}
-            className="flex min-w-0 items-center gap-3 hover:opacity-80"
+            aria-label="View profile"
+            className="hover:bg-muted inline-flex min-h-[44px] min-w-0 items-center gap-3 rounded-full pl-1 pr-3 transition-colors"
           >
             <Avatar src={otherUser.image} name={otherUser.name} size={36} />
             <span className="text-foreground truncate font-medium">
