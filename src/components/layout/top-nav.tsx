@@ -95,18 +95,27 @@ export function TopNav({ user }: { user: NavUser }) {
                   Pro
                 </span>
               )}
+              {/* Profile pill — subtle button affordance so the click
+                  target reads as interactive (was just plain text, which
+                  users tended to overlook and misclick the SignOut icon
+                  instead). pl-1 hugs the avatar tight, pr-3 gives
+                  comfortable side around the name; the rounded-full +
+                  hover:bg-muted is the same pattern shadcn uses for
+                  ghost-style triggers. Larger click target, clearer
+                  affordance — same href as before. */}
               <Link
                 href={
                   user.userType === "creator"
                     ? `/creator/${user.id}`
                     : `/startup/${user.id}`
                 }
-                className="text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm"
+                aria-label="Your profile"
+                className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex min-h-[40px] items-center gap-2 rounded-full pl-1 pr-3 text-sm transition-colors"
               >
                 <Avatar
                   src={user.image}
                   name={user.name}
-                  size={28}
+                  size={32}
                 />
                 <span>{user.name ?? "Profile"}</span>
               </Link>
