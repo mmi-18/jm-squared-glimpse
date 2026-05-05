@@ -139,6 +139,14 @@ enum ProjectStatus {
   cancelled
 }
 
+// Direction of a review on a Project. Two-way blind reviews — both sides
+// rate each other after sign-off; neither sees the other's rating until
+// both have submitted (or 14 days pass — see Chunk A4 cron).
+enum ReviewDirection {
+  client_to_creator
+  creator_to_client
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // AUTH (BetterAuth-managed)
 // ════════════════════════════════════════════════════════════════════════════
@@ -433,21 +441,40 @@ model Message {
 // ════════════════════════════════════════════════════════════════════════════
 
 model Review {
-  id                  String   @id @default(cuid())
+  id                  String           @id @default(cuid())
   reviewerId          String
   reviewedId          String
+  // Project the review is for. Nullable so reviews seeded before
+  // projects existed (the migrated Supabase set) keep working.
+  projectId           String?
+  // Which way this review goes. Nullable for the legacy seed reviews
+  // that pre-date the project flow.
+  direction           ReviewDirection?
+  // Two-way blind: a review is invisible to the other party (and on
+  // public profiles) until BOTH directions on the same project have
+  // been submitted, or the 14-day stale-release cron fires.
+  // Default true preserves visibility of pre-existing seed reviews.
+  released            Boolean          @default(true)
+
   projectDescription  String?
   ratingOverall       Int? // 1-5, enforced in app
   ratingReliability   Int?
   ratingQuality       Int?
   ratingCollaboration Int?
   reviewText          String?
-  createdAt           DateTime @default(now()) @db.Timestamptz
+  createdAt           DateTime         @default(now()) @db.Timestamptz
 
-  reviewer User @relation("Reviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
-  reviewed User @relation("Reviewed", fields: [reviewedId], references: [id], onDelete: Cascade)
+  reviewer User     @relation("Reviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
+  reviewed User     @relation("Reviewed", fields: [reviewedId], references: [id], onDelete: Cascade)
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([reviewedId])
+  @@index([projectId])
+  // (We'd love a @@unique([projectId, reviewerId]) but Prisma's migrate
+  //  flow blocks the constraint addition non-interactively when warning
+  //  about possible duplicates. The submitReview action already checks
+  //  for existing rows before inserting, so the constraint is belt-and-
+  //  suspenders rather than essential. Add later if seed data permits.)
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -500,6 +527,7 @@ model Project {
   client       User          @relation("Client", fields: [clientId], references: [id], onDelete: Cascade)
   creator      User          @relation("Creator", fields: [creatorId], references: [id], onDelete: Cascade)
   conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  reviews      Review[]
 
   @@index([clientId])
   @@index([creatorId])

@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Star } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { Avatar } from "@/components/brand/avatar";
 import { ProjectActions } from "./project-actions";
+import { ReviewForm } from "./review-form";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -63,6 +64,12 @@ export default async function ProjectPage({
         select: { id: true, name: true, image: true, userType: true },
       },
       conversation: { select: { id: true } },
+      reviews: {
+        include: {
+          reviewer: { select: { id: true, name: true, image: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      },
     },
   });
 
@@ -70,6 +77,17 @@ export default async function ProjectPage({
 
   const role: "client" | "creator" =
     project.clientId === me.id ? "client" : "creator";
+
+  // Reviews surface logic for the two-way blind flow
+  const myReview = project.reviews.find((r) => r.reviewerId === me.id);
+  const counterpartyReview = project.reviews.find(
+    (r) => r.reviewerId !== me.id,
+  );
+  const counterparty = role === "client" ? project.creator : project.client;
+  const showReviewForm = project.status === "completed" && !myReview;
+  // Released reviews are visible to both. Unreleased ones — show only the
+  // viewer's own (so they can verify they submitted) without leaking content.
+  const releasedReviews = project.reviews.filter((r) => r.released);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 md:px-6">
@@ -180,10 +198,81 @@ export default async function ProjectPage({
         </p>
       )}
 
+      {/* Review form — completed projects, only if the viewer hasn't
+          submitted theirs yet. */}
+      {showReviewForm && (
+        <ReviewForm
+          projectId={project.id}
+          counterpartyName={counterparty.name}
+          viewerRole={role}
+        />
+      )}
+
+      {/* Already submitted, but counterparty hasn't yet → "thanks, waiting
+          on them" status card. */}
       {project.status === "completed" &&
-        (role === "client"
-          ? null /* undo button shows when within 24h */
-          : null)}
+        myReview &&
+        !counterpartyReview && (
+          <div className="border-border bg-card mt-6 rounded-2xl border p-4 text-sm">
+            <p className="font-medium">Review submitted ✓</p>
+            <p className="text-muted-foreground mt-1">
+              Waiting on {counterparty.name ?? "the other party"} to
+              submit theirs. Once they do — or after 14 days — both
+              reviews go live on your profiles.
+            </p>
+          </div>
+        )}
+
+      {/* Both submitted and released → show them inline. */}
+      {releasedReviews.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Reviews
+          </h2>
+          <div className="space-y-3">
+            {releasedReviews.map((r) => (
+              <div
+                key={r.id}
+                className="border-border bg-card rounded-2xl border p-4"
+              >
+                <div className="mb-2 flex items-center gap-3">
+                  <Avatar
+                    src={r.reviewer.image}
+                    name={r.reviewer.name}
+                    size={32}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{r.reviewer.name}</p>
+                    <p className="text-muted-foreground text-xs">
+                      {r.direction === "client_to_creator"
+                        ? "Client → Creator"
+                        : "Creator → Client"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                    <span className="text-sm font-medium">
+                      {r.ratingOverall}
+                      <span className="text-muted-foreground"> / 5</span>
+                    </span>
+                  </div>
+                </div>
+                {r.reviewText && (
+                  <p className="text-sm leading-relaxed">{r.reviewText}</p>
+                )}
+                <dl className="mt-3 grid grid-cols-3 gap-y-1 text-xs">
+                  <dt className="text-muted-foreground">Reliability</dt>
+                  <dd className="col-span-2">{r.ratingReliability} / 5</dd>
+                  <dt className="text-muted-foreground">Quality</dt>
+                  <dd className="col-span-2">{r.ratingQuality} / 5</dd>
+                  <dt className="text-muted-foreground">Collaboration</dt>
+                  <dd className="col-span-2">{r.ratingCollaboration} / 5</dd>
+                </dl>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

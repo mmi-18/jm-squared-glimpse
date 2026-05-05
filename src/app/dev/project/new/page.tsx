@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Star } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { Button } from "@/components/ui/button";
+import { getOldestPendingReviewForUser } from "@/lib/reviews";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -72,6 +73,45 @@ async function createDevProject(formData: FormData) {
 
 export default async function DevNewProjectPage() {
   const me = await requireUser();
+
+  // Soft block: if there's a completed project the user hasn't reviewed
+  // yet, redirect them there to leave the review first. Mandatory-review
+  // pattern (Uber model) — you can't book the next ride until you've
+  // rated the previous one.
+  const pendingReview = await getOldestPendingReviewForUser(me.id);
+  if (pendingReview) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-10 md:px-6">
+        <Link
+          href="/feed"
+          className="text-muted-foreground hover:text-foreground mb-6 inline-flex items-center gap-2 text-sm"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to feed
+        </Link>
+        <div className="border-border bg-card flex flex-col items-start gap-3 rounded-2xl border p-6">
+          <Star className="h-6 w-6 fill-amber-400 text-amber-400" />
+          <h1 className="text-xl font-medium tracking-tight">
+            Review your last project first
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            You haven&apos;t left a review for{" "}
+            <strong>{pendingReview.title}</strong>
+            {pendingReview.counterpartyName && (
+              <> with {pendingReview.counterpartyName}</>
+            )}
+            . Reviews are how we keep matches honest — drop a quick rating
+            and you&apos;re unblocked.
+          </p>
+          <Link
+            href={`/project/${pendingReview.id}`}
+            className={buttonVariants({ size: "lg", className: "mt-2 w-full" })}
+          >
+            Review project →
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const otherUsers = await db.user.findMany({
     where: {

@@ -107,6 +107,104 @@ export async function undoSignOff(projectId: string) {
 }
 
 /**
+ * Either party: submit their review on a completed project.
+ *
+ * Two-way blind logic: each side's row is stored with `released=false`.
+ * Once both sides have submitted, BOTH rows flip to `released=true` in
+ * the same transaction. Pre-existing seed reviews have `projectId=null`
+ * and `released=true` by default — they're untouched.
+ *
+ * If the counterparty submitted >14 days ago and is still waiting on
+ * us, the cron in Chunk A4 will have already released theirs unilaterally.
+ * This action also checks that case for safety: if a counterparty review
+ * exists already, we release both regardless of timing.
+ */
+export async function submitReview(args: {
+  projectId: string;
+  ratingOverall: number;
+  ratingReliability: number;
+  ratingQuality: number;
+  ratingCollaboration: number;
+  text?: string | null;
+}) {
+  const me = await requireUser();
+  const project = await loadProjectAsParty(args.projectId, me.id);
+
+  if (project.status !== "completed") {
+    throw new Error("Reviews can only be submitted on completed projects");
+  }
+  if (!project.signedOffAt) {
+    throw new Error("Project must be signed off before reviewing");
+  }
+
+  // Range-check ratings (1-5).
+  for (const r of [
+    args.ratingOverall,
+    args.ratingReliability,
+    args.ratingQuality,
+    args.ratingCollaboration,
+  ]) {
+    if (!Number.isInteger(r) || r < 1 || r > 5) {
+      throw new Error("Each rating must be an integer between 1 and 5");
+    }
+  }
+
+  // Already reviewed?
+  const existing = await db.review.findFirst({
+    where: { projectId: args.projectId, reviewerId: me.id },
+    select: { id: true },
+  });
+  if (existing) {
+    throw new Error("You've already submitted a review for this project");
+  }
+
+  const isClient = me.id === project.clientId;
+  const direction = isClient ? "client_to_creator" : "creator_to_client";
+  const reviewedId = isClient ? project.creatorId : project.clientId;
+  const text = (args.text ?? "").trim() || null;
+
+  await db.$transaction(async (tx) => {
+    await tx.review.create({
+      data: {
+        reviewerId: me.id,
+        reviewedId,
+        projectId: args.projectId,
+        direction,
+        released: false,
+        ratingOverall: args.ratingOverall,
+        ratingReliability: args.ratingReliability,
+        ratingQuality: args.ratingQuality,
+        ratingCollaboration: args.ratingCollaboration,
+        reviewText: text,
+      },
+    });
+
+    // Check if the OTHER direction already exists for this project.
+    // If yes → flip both released=true. Two-way blind reveal.
+    const both = await tx.review.findMany({
+      where: { projectId: args.projectId },
+      select: { direction: true },
+    });
+    const hasClient = both.some((r) => r.direction === "client_to_creator");
+    const hasCreator = both.some((r) => r.direction === "creator_to_client");
+    if (hasClient && hasCreator) {
+      await tx.review.updateMany({
+        where: { projectId: args.projectId, released: false },
+        data: { released: true },
+      });
+    }
+  });
+
+  // Revalidate every surface that shows reviews
+  revalidatePath(`/project/${args.projectId}`);
+  revalidatePath(`/creator/${reviewedId}`);
+  revalidatePath(`/startup/${reviewedId}`);
+  revalidatePath(`/creator/${me.id}`);
+  revalidatePath(`/startup/${me.id}`);
+  return { ok: true };
+}
+
+/**
  * Either party: cancel a non-final project. Status flows to `cancelled`
  * with `cancelledAt = now()`. Cannot be reversed.
  */

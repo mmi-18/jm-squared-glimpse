@@ -105,7 +105,9 @@ export default async function CreatorProfilePage({
       orderBy: { createdAt: "desc" },
     }),
     db.review.findMany({
-      where: { reviewedId: id },
+      // released: true gates reviews behind the two-way blind window —
+      // legacy seed reviews default to released=true so they're unaffected.
+      where: { reviewedId: id, released: true },
       orderBy: { createdAt: "desc" },
       include: {
         reviewer: { select: { id: true, name: true, image: true } },

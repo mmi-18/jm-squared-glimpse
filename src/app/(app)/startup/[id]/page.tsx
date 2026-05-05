@@ -119,7 +119,8 @@ export default async function StartupProfilePage({
       orderBy: { createdAt: "desc" },
     }),
     db.review.findMany({
-      where: { reviewedId: id },
+      // released: true gates reviews behind the two-way blind window.
+      where: { reviewedId: id, released: true },
       orderBy: { createdAt: "desc" },
       include: {
         reviewer: { select: { id: true, name: true, image: true } },
