@@ -105,20 +105,65 @@ export default async function ConversationPage({
           <div className="space-y-3">
             {messages.map((m) => {
               const mine = m.senderId === currentUser.id;
+              const hasText = m.content.trim().length > 0;
+              const hasAttachments = m.attachmentUrls.length > 0;
               return (
                 <div
                   key={m.id}
-                  className={`flex ${mine ? "justify-end" : "justify-start"}`}
+                  className={`flex flex-col gap-1 ${mine ? "items-end" : "items-start"}`}
                 >
-                  <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
-                      mine
-                        ? "bg-foreground text-background"
-                        : "bg-muted text-foreground"
-                    }`}
-                  >
-                    {m.content}
-                  </div>
+                  {hasText && (
+                    <div
+                      className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
+                        mine
+                          ? "bg-foreground text-background"
+                          : "bg-muted text-foreground"
+                      }`}
+                    >
+                      {m.content}
+                    </div>
+                  )}
+                  {hasAttachments && (
+                    <div
+                      className={`grid max-w-[280px] gap-1 ${
+                        m.attachmentUrls.length === 1
+                          ? "grid-cols-1"
+                          : "grid-cols-2"
+                      }`}
+                    >
+                      {m.attachmentUrls.map((url, i) => {
+                        const isVideo = /\.(mp4|mov)(\?|$)/i.test(url);
+                        return (
+                          <a
+                            key={i}
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="border-border bg-muted relative block aspect-square overflow-hidden rounded-xl border transition-opacity hover:opacity-90"
+                          >
+                            {isVideo ? (
+                              /* Inline video preview, click to open in
+                                 new tab for full-screen native controls */
+                              <video
+                                src={url}
+                                className="h-full w-full object-cover"
+                                muted
+                                playsInline
+                              />
+                            ) : (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img
+                                src={url}
+                                alt={`Attachment ${i + 1}`}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            )}
+                          </a>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}

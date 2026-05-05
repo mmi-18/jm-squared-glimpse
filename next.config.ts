@@ -17,6 +17,11 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "api.dicebear.com" },
       // QR-code generator used on the share-profile screen.
       { protocol: "https", hostname: "api.qrserver.com" },
+      // Hetzner Object Storage — user-uploaded post images / future
+      // delivery files. Match the NBG1 endpoint we point at in
+      // src/lib/s3.ts. If we ever switch regions, add the new host
+      // here too.
+      { protocol: "https", hostname: "nbg1.your-objectstorage.com" },
     ],
   },
 };

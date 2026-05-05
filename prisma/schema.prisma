@@ -424,6 +424,10 @@ model Message {
   senderId       String
   receiverId     String
   content        String
+  // Attachment URLs — bucket links from /api/upload (Hetzner Object
+  // Storage). Empty array if text-only. Order matters; rendered in
+  // the conversation as a grid below the text bubble.
+  attachmentUrls String[] @default([])
   read           Boolean  @default(false)
   matchScore     Float?
   createdAt      DateTime @default(now()) @db.Timestamptz
