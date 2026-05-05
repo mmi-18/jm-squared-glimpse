@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { requireUser } from "@/lib/auth";
-import { S3_BUCKET, publicUrlFor, s3 } from "@/lib/s3";
+import { publicUrlFor, s3, s3Bucket } from "@/lib/s3";
 
 export const dynamic = "force-dynamic";
 
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
 
   await s3().send(
     new PutObjectCommand({
-      Bucket: S3_BUCKET,
+      Bucket: s3Bucket(),
       Key: key,
       Body: buffer,
       ContentType: file.type,

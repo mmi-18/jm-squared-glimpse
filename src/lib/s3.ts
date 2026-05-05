@@ -11,6 +11,12 @@ import { S3Client } from "@aws-sdk/client-s3";
  * Path-style addressing is the default for Hetzner — virtual-hosted
  * style isn't reliably supported across their LB so we set
  * `forcePathStyle: true` to keep the URL pattern stable.
+ *
+ * IMPORTANT: every export here is lazy. `next build` traces imports
+ * during page-data collection, and the build environment doesn't have
+ * the HETZNER_S3_* env vars set (those live in the runtime .env). If
+ * we read env at module-eval time, the build crashes. So all access
+ * goes through a function call that's only invoked at request time.
  */
 
 const requiredEnv = (name: string): string => {
@@ -23,20 +29,8 @@ const requiredEnv = (name: string): string => {
   return v;
 };
 
-export const S3_BUCKET = requiredEnv("HETZNER_S3_BUCKET");
-export const S3_PUBLIC_URL = requiredEnv("HETZNER_S3_PUBLIC_URL").replace(
-  /\/+$/,
-  "",
-);
-
 let _client: S3Client | null = null;
 
-/**
- * Lazily-constructed S3 client. Lazy because env vars aren't always
- * present at module-eval time during `next build` (e.g. when the
- * builder collects page data and the runtime env hasn't been wired
- * yet). Constructing on first use avoids that footgun.
- */
 export function s3(): S3Client {
   if (_client) return _client;
   _client = new S3Client({
@@ -51,9 +45,14 @@ export function s3(): S3Client {
   return _client;
 }
 
+/** The bucket name we PUT/GET/DELETE against. Read at call time. */
+export function s3Bucket(): string {
+  return requiredEnv("HETZNER_S3_BUCKET");
+}
+
 /** Convert an object key to a publicly-fetchable URL. */
 export function publicUrlFor(key: string): string {
-  // Trim any leading slash so the path-style URL doesn't double up.
+  const base = requiredEnv("HETZNER_S3_PUBLIC_URL").replace(/\/+$/, "");
   const cleanKey = key.replace(/^\/+/, "");
-  return `${S3_PUBLIC_URL}/${cleanKey}`;
+  return `${base}/${cleanKey}`;
 }
