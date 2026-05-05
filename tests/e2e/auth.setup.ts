@@ -1,30 +1,39 @@
 /**
- * One-time auth setup for the audit suite.
- *
- * Signs in once as Kiri (a migrated seed user) and writes the resulting
- * BetterAuth session cookie to tests/e2e/.auth/kiri.json. The audit
- * project then reuses that storage state so every authed audit test
- * starts already-signed-in — no re-login per test, no rate-limit flakes.
+ * One-time auth setup. Signs in once each as Kiri (creator) and Voltfang
+ * (startup) — two of the migrated seed users — and writes their
+ * BetterAuth session cookies to tests/e2e/.auth/{kiri,voltfang}.json.
+ * Audit + behavior specs reuse those storage states so every test
+ * starts already-signed-in, no re-login per test, no BetterAuth
+ * same-IP rate-limit flakes.
  *
  * Lives in its own Playwright project (`auth-setup`) so it only runs
- * when the audit runs, not for the smoke suite.
+ * when the audit project runs, not for smoke.
  */
-import { test as setup, expect } from "@playwright/test";
+import { test as setup, expect, type Page } from "@playwright/test";
 
-const KIRI_EMAIL = "kiri@seed.glimpse.app";
 const SHARED_PASSWORD = "glimpse-seed-2026";
-const STORAGE_FILE = "tests/e2e/.auth/kiri.json";
 
-setup("authenticate as Kiri", async ({ page }) => {
+async function signInAs(page: Page, email: string, storageFile: string) {
   await page.goto("/login");
-  await page.locator("#email").fill(KIRI_EMAIL);
+  await page.locator("#email").fill(email);
   await page.locator("#password").fill(SHARED_PASSWORD);
   await page.getByRole("button", { name: /sign in/i }).click();
 
   await page.waitForURL(/\/feed/, { timeout: 30_000 });
-  // Sanity: the BetterAuth session cookie is set
   const cookies = await page.context().cookies();
   expect(cookies.some((c) => c.name.includes("session"))).toBe(true);
 
-  await page.context().storageState({ path: STORAGE_FILE });
+  await page.context().storageState({ path: storageFile });
+}
+
+setup("authenticate as Kiri (creator)", async ({ page }) => {
+  await signInAs(page, "kiri@seed.glimpse.app", "tests/e2e/.auth/kiri.json");
+});
+
+setup("authenticate as Voltfang (startup)", async ({ page }) => {
+  await signInAs(
+    page,
+    "voltfang@seed.glimpse.app",
+    "tests/e2e/.auth/voltfang.json",
+  );
 });
