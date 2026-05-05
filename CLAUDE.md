@@ -91,6 +91,37 @@ bind mount, no more `src/app/uploads/[...path]/route.ts`. If a
 deploy ever needs to roll back to filesystem mode, both git history
 and the prior route handler can be restored.
 
+## Don't read runtime env at module top-level
+
+`next build` traces every page's imports during page-data collection.
+Anything at module top-level that touches `process.env` for a runtime
+secret (DB credentials, S3 keys, BetterAuth secret, etc.) **runs in
+the build environment** — which doesn't have those vars set. The build
+crashes with `Missing env var X`, deploy gets skipped.
+
+We hit this exact bug on the S3 cutover (run #25386972294 Build job
+failed; see commit `c3e0433` for the fix).
+
+**Bad** — throws at `next build`:
+
+```ts
+// src/lib/s3.ts
+export const S3_BUCKET = requireEnv("HETZNER_S3_BUCKET");  // ❌
+```
+
+**Good** — only fires when called inside a request:
+
+```ts
+export function s3Bucket(): string {
+  return requireEnv("HETZNER_S3_BUCKET");  // ✓
+}
+```
+
+Rule of thumb: anything that reads a runtime env var goes inside a
+function, not at top level. Build-time vars baked into the client
+bundle (`NEXT_PUBLIC_*` set as Docker `ARG`) are the exception —
+those are valid at build because they're passed into the build.
+
 ## Prisma migrations
 
 Use the standard Prisma flow against the Neon `main` branch:
