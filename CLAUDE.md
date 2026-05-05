@@ -64,6 +64,54 @@ never on Netlify, never on Cloudflare Pages.
   is the entry point. Object Lock is **off** (we need to honor GDPR
   delete-on-request, which Object Lock would prevent).
 
+## Work agreement (Chunk C)
+
+The "Hire" flow on a creator profile is the production entry point for
+projects. It opens a structured agreement form and creates a `Project`
+in `pending` status. Both parties have to accept before status flips to
+`active` and the existing project state machine (Chunk A) takes over.
+
+Schema fields (all on `Project`, all nullable so legacy / dev rows
+created before Chunk C keep working):
+
+- `scope`, `deliverables` — free-text. Creator + client both read this
+  before accepting; treat it as the legal handshake basis.
+- `priceCents` (Int) + `currency` (default "EUR") — face value in
+  minor units (Stripe/Adyen/Mollie idiom). Platform fees (10% client /
+  5% creator, see "Commercial model" above) apply on top of this.
+- `deadline` (`@db.Date`) — calendar deadline, time component irrelevant.
+- `revisionRounds` (Int) — bundled into the price; further rounds need
+  an amendment.
+- `usageRights` (UsageRights enum, reused from StartupProfile) — full
+  buyout / limited platform / time-limited / negotiable.
+- `clientAcceptedAt` + `creatorAcceptedAt` (timestamptz) — set when
+  each party accepts. Both non-null + status=pending ⇒ status flips
+  to active in the same `acceptAgreement` transaction.
+
+State rules (enforced in `src/app/(app)/project/agreement-actions.ts`):
+
+- `hireCreator`: only startups; creates Project with terms + the
+  client's acceptance pre-set (submitting the form *is* the offer).
+- `amendAgreement`: either party can amend while pending. The amender's
+  acceptance is set; the **counterparty's acceptance is cleared** — they
+  must re-accept the new terms.
+- `acceptAgreement`: caller's `*AcceptedAt` is set; if the other side
+  is already accepted, the same update flips status `pending → active`.
+- All three actions reject when status ≠ pending. Once a project is
+  active, the agreement is immutable for the rest of the project.
+
+UI surfaces:
+
+- Hire button on `/creator/<id>` (visible to logged-out and
+  logged-in startups; hidden when a creator is viewing another creator).
+  Opens the modal `src/components/project/hire-dialog.tsx`.
+- `src/components/project/agreement-panel.tsx` renders on
+  `/project/<id>` while status=pending — shows the terms grid + each
+  party's acceptance pill + accept/amend buttons.
+- `/dev/project/new` is still around as a dev shortcut that skips the
+  agreement and spawns straight into `active` — handy for exercising
+  the mark-delivered/sign-off flow without the handshake.
+
 ## Uploads
 
 User uploads (post images, future delivery files, avatars) all flow

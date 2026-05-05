@@ -136,12 +136,21 @@ export default async function DevNewProjectPage() {
         Create test project
       </h1>
       <p className="text-muted-foreground mb-6 text-sm">
-        Dev-only. The structured work-agreement form (Chunk C) will
-        replace this once it ships. Project is created in the{" "}
+        Dev shortcut — skips the work-agreement (Chunk C) flow and
+        spawns a project directly in the{" "}
         <code className="bg-muted rounded px-1 py-0.5 text-xs">
           active
         </code>{" "}
-        state so you can immediately exercise mark-delivered → sign-off.
+        state so you can exercise mark-delivered → sign-off without
+        going through the Hire → accept handshake. For the production
+        path, hit{" "}
+        <Link
+          href="/discover"
+          className="text-foreground underline underline-offset-2"
+        >
+          /discover
+        </Link>
+        , open a creator&apos;s profile, and click <em>Hire</em>.
       </p>
 
       <form action={createDevProject} className="space-y-4">

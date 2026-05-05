@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { MatchScoreBadge } from "@/components/feed/match-score-badge";
 import { MessageDialog } from "@/components/messaging/message-dialog";
+import { HireDialog } from "@/components/project/hire-dialog";
 import { Avatar } from "@/components/brand/avatar";
 import { Button } from "@/components/ui/button";
 import { ProfileContentGrid } from "@/components/profile/profile-content-grid";
@@ -257,17 +258,29 @@ export default async function CreatorProfilePage({
               <MatchScoreBadge score={matchScore} size="lg" />
             )}
             {!isOwn ? (
-              <MessageDialog
-                recipientId={user.id}
-                recipientName={user.name ?? "Creator"}
-                matchScore={matchScore}
-                isAuthenticated={!!currentUser}
-                trigger={
-                  <Button>
-                    <MessageCircle className="size-4" /> Send message
-                  </Button>
-                }
-              />
+              <>
+                <MessageDialog
+                  recipientId={user.id}
+                  recipientName={user.name ?? "Creator"}
+                  matchScore={matchScore}
+                  isAuthenticated={!!currentUser}
+                  trigger={
+                    <Button variant="outline">
+                      <MessageCircle className="size-4" /> Send message
+                    </Button>
+                  }
+                />
+                {/* Hire flow — only available to logged-in startups (or
+                    logged-out users, who'll be sent to /login on click).
+                    Hidden when a logged-in creator views another creator. */}
+                {(!currentUser || currentUser.userType === "startup") && (
+                  <HireDialog
+                    creatorId={user.id}
+                    creatorName={user.name ?? "this creator"}
+                    isAuthenticated={!!currentUser}
+                  />
+                )}
+              </>
             ) : (
               <Link
                 href="/new-post"

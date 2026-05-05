@@ -6,6 +6,8 @@ import { requireUser } from "@/lib/auth";
 import { Avatar } from "@/components/brand/avatar";
 import { ProjectActions } from "./project-actions";
 import { ReviewForm } from "./review-form";
+import { AgreementPanel } from "@/components/project/agreement-panel";
+import { PendingCancelRow } from "@/components/project/pending-cancel-row";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -154,8 +156,9 @@ export default async function ProjectPage({
         </Link>
       </div>
 
-      {/* Timeline metadata. Just dates for now; revision rounds + price
-          land with the work-agreement (Chunk C). */}
+      {/* Timeline metadata. The agreed price + deadline + revisions live
+          inside the agreement panel below; this card just shows the
+          state-machine timestamps (started / signed-off / cancelled). */}
       <div className="border-border bg-card mb-6 rounded-2xl border p-4 text-sm">
         <dl className="grid grid-cols-3 gap-y-2">
           <dt className="text-muted-foreground">Started</dt>
@@ -181,14 +184,49 @@ export default async function ProjectPage({
         </dl>
       </div>
 
-      {/* Action bar — only when there's something the user can do. */}
-      {project.status !== "cancelled" && (
+      {/* Pending — show the work agreement (Chunk C). When status is
+          pending, the project doesn't have its standard action bar
+          yet — the agreement IS the action surface (accept / amend).
+          Once both sides accept, status flips to active and the
+          ProjectActions block below takes over. */}
+      {project.status === "pending" && (
+        <AgreementPanel
+          projectId={project.id}
+          agreement={{
+            title: project.title,
+            scope: project.scope,
+            deliverables: project.deliverables,
+            priceCents: project.priceCents,
+            currency: project.currency,
+            deadline: project.deadline,
+            revisionRounds: project.revisionRounds,
+            usageRights: project.usageRights,
+            clientAcceptedAt: project.clientAcceptedAt,
+            creatorAcceptedAt: project.creatorAcceptedAt,
+          }}
+          viewerRole={role}
+          viewerCanEdit
+          clientName={project.client.name ?? "Client"}
+          creatorName={project.creator.name ?? "Creator"}
+        />
+      )}
+
+      {/* Active+ — the existing project state-machine action bar. */}
+      {project.status !== "pending" && project.status !== "cancelled" && (
         <ProjectActions
           projectId={project.id}
           role={role}
           status={project.status}
           signedOffAt={project.signedOffAt?.toISOString() ?? null}
         />
+      )}
+
+      {/* Pending projects can also be cancelled outright. The
+          ProjectActions component handles that for active/delivered;
+          for pending we render a small inline cancel here so the
+          user isn't trapped in a stale negotiation. */}
+      {project.status === "pending" && (
+        <PendingCancelRow projectId={project.id} />
       )}
 
       {project.status === "delivered" && role === "creator" && (

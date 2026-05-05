@@ -521,6 +521,35 @@ model Project {
   title  String
   status ProjectStatus @default(pending)
 
+  // ─── Work agreement (Chunk C) ────────────────────────────────────────────
+  // The structured deal both parties accept before status flips
+  // pending → active. All nullable so legacy / dev-created projects
+  // (pre-Chunk C) keep working. The Hire flow (`/creator/<id>` →
+  // "Hire" button) populates these on creation; either party can
+  // amend, which clears the *other* party's acceptance and forces
+  // re-acceptance.
+  scope          String?
+  deliverables   String?
+  // Face value of the project in cents of `currency`. €5,000 = 500000.
+  // Stored in cents to dodge floating-point rounding (the same reason
+  // Stripe / Mollie / Adyen all do this).
+  priceCents     Int?
+  currency       String      @default("EUR")
+  // When the creator's deliverable is due. Date-only (no clock —
+  // calendar deadlines are how creators think).
+  deadline       DateTime?   @db.Date
+  // How many revision passes are baked into the price.
+  revisionRounds Int?
+  // What the client may do with the finished work — rights bundle.
+  // Reuses the same enum as the StartupProfile preference field.
+  usageRights    UsageRights?
+
+  // Per-party acceptance timestamps. Both non-null AND status=pending
+  // → server action flips to status=active. An amendment clears the
+  // *non-amending* party's acceptance.
+  clientAcceptedAt  DateTime? @db.Timestamptz
+  creatorAcceptedAt DateTime? @db.Timestamptz
+
   createdAt   DateTime  @default(now()) @db.Timestamptz
   updatedAt   DateTime  @updatedAt @db.Timestamptz
   // Set when status transitions to `completed`. Nullable until then.
