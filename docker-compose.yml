@@ -41,12 +41,13 @@ services:
     env_file:
       - .env
     volumes:
-      # Mount under public/ so Next.js serves uploaded files as static
-      # assets directly (https://glimpse.jm-squared.com/uploads/<name>),
-      # without needing a custom file-streaming route. Next reads
-      # public/ from disk at request time, so files written here at
-      # runtime become servable immediately.
-      - ./uploads:/app/public/uploads
+      # Mount at /app/uploads (NOT under public/). Next.js's production
+      # static-file handler reads its public/ manifest at image build
+      # time, so files added later via this mount return 404 even though
+      # they're on disk. Instead, src/app/uploads/[...path]/route.ts
+      # serves them via a route handler that reads from /app/uploads on
+      # every request.
+      - ./uploads:/app/uploads
     networks:
       - web
     labels:

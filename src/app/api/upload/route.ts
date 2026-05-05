@@ -89,7 +89,9 @@ export async function POST(request: Request) {
   // randomUUID produces 36-char hex with dashes — collision risk on
   // 10^36 namespace is microscopic, no need for nanoid here.
   const filename = `${randomUUID()}.${ext}`;
-  const uploadsDir = path.join(process.cwd(), "public", "uploads");
+  // /app/uploads — bind-mounted from host's /home/mario/glimpse/uploads.
+  // Served back to the browser via src/app/uploads/[...path]/route.ts.
+  const uploadsDir = path.join(process.cwd(), "uploads");
   await mkdir(uploadsDir, { recursive: true });
   const target = path.join(uploadsDir, filename);
 
