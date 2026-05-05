@@ -17,6 +17,32 @@ Before writing code for anything user-facing, reason about the interaction from 
 
 When in doubt, ask the question "how would Trade Republic / Pinterest / Instagram handle this?" and apply that pattern with glimpse.'s visual language.
 
+## Commercial model
+
+Platform fees on each completed project (current as of May 2026):
+
+- **Companies (startups) pay 10%** on top of the project face value
+- **Creators pay 5%** out of the project face value
+
+So a €5,000 project means: client pays €5,500 → creator receives €4,750 →
+platform takes €750 (~13.6% of cash flow). Total platform take stays
+roughly in line with Upwork (~15%) but with the **larger share carried
+by the buyer**, who is generally less price-sensitive than the creator
+selling their time.
+
+Reasoning recorded so we don't drift later:
+- Creator-side fee kept low (5%) so glimpse beats Fiverr (20%) and
+  Upwork (10%) on creator take-home — important for creator acquisition
+- Client-side fee (10%) frames glimpse as a curated marketplace, not a
+  bidding race-to-the-bottom; clients accept the surcharge in exchange
+  for the project-management + audit-trail + escrow features
+- Repeat clients can be discounted later (e.g., 8% on the 3rd+ project
+  with the same creator) as a retention lever — see Chunk F notes
+
+These rates are **business-policy constants**. When implementing
+payment flows, reference this section, do not hard-code different
+numbers in code without checking here first.
+
 ## Stack reference
 
 This project is **self-hosted on Hetzner** behind Traefik — never on Vercel,

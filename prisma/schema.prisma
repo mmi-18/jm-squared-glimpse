@@ -57,10 +57,10 @@ enum Availability {
 }
 
 enum Turnaround {
-  days_1_3       @map("1_3_days")
-  week_1         @map("1_week")
-  weeks_2        @map("2_weeks")
-  month_1        @map("1_month")
+  days_1_3 @map("1_3_days")
+  week_1   @map("1_week")
+  weeks_2  @map("2_weeks")
+  month_1  @map("1_month")
   flexible
 }
 
@@ -118,6 +118,27 @@ enum Format {
   square
 }
 
+// State machine for the post-match working relationship between a startup
+// (client) and a creator. See models/Project below + the Chunk A notes
+// in CLAUDE.md.
+//
+//   pending    →  client + creator have a Project record, but work hasn't
+//                 actively started (e.g. work agreement still being drafted)
+//   active     →  agreed; creator is working
+//   delivered  →  creator has uploaded final deliverable, client to review
+//   completed  →  client has signed off; payout fires from this point
+//   cancelled  →  either party cancelled before completion
+//
+// Transitions are enforced in the app layer (server actions), not at the
+// DB level — Prisma can't express state machines natively.
+enum ProjectStatus {
+  pending
+  active
+  delivered
+  completed
+  cancelled
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // AUTH (BetterAuth-managed)
 // ════════════════════════════════════════════════════════════════════════════
@@ -128,13 +149,13 @@ enum Format {
 
 model User {
   // ── BetterAuth core fields ────────────────────────────────────────────────
-  id            String    @id @default(cuid())
-  email         String    @unique
-  emailVerified Boolean   @default(false)
+  id            String   @id @default(cuid())
+  email         String   @unique
+  emailVerified Boolean  @default(false)
   name          String?
   image         String?
-  createdAt     DateTime  @default(now()) @db.Timestamptz
-  updatedAt     DateTime  @updatedAt @db.Timestamptz
+  createdAt     DateTime @default(now()) @db.Timestamptz
+  updatedAt     DateTime @updatedAt @db.Timestamptz
 
   // ── Glimpse domain fields (formerly public.users in Supabase) ─────────────
   userType            UserType
@@ -159,6 +180,8 @@ model User {
   conversationsAsB  Conversation[]  @relation("ParticipantB")
   messagesSent      Message[]       @relation("Sender")
   messagesReceived  Message[]       @relation("Receiver")
+  projectsAsClient  Project[]       @relation("Client")
+  projectsAsCreator Project[]       @relation("Creator")
 
   @@index([userType])
 }
@@ -214,35 +237,35 @@ model CreatorProfile {
   userId String @id
 
   // Core
-  discipline           Discipline?
-  contentCategories    String[]      @default([])
-  contentStyleTags     String[]      @default([])
-  deliverableTypes     String[]      @default([])
-  rateMin              Int?
-  rateMax              Int?
-  availability         Availability?
-  portfolioUrls        String[]      @default([])
+  discipline        Discipline?
+  contentCategories String[]      @default([])
+  contentStyleTags  String[]      @default([])
+  deliverableTypes  String[]      @default([])
+  rateMin           Int?
+  rateMax           Int?
+  availability      Availability?
+  portfolioUrls     String[]      @default([])
 
   // Important
-  subSpecializations        String[]            @default([])
-  industryExperience        String[]            @default([])
-  minimumAcceptableBudget   Int?
-  typicalTurnaround         Turnaround?
-  travelWillingness         Travel?
-  preferredProjectTypes     String[]            @default([])
-  unwantedWorkTypes         String[]            @default([])
-  usageLicensingPreference  Licensing?
-  productionCapabilities    String[]            @default([])
-  socialHandles             Json                @default("{}")
-  creativeDiscipline        CreativeDiscipline?
+  subSpecializations       String[]            @default([])
+  industryExperience       String[]            @default([])
+  minimumAcceptableBudget  Int?
+  typicalTurnaround        Turnaround?
+  travelWillingness        Travel?
+  preferredProjectTypes    String[]            @default([])
+  unwantedWorkTypes        String[]            @default([])
+  usageLicensingPreference Licensing?
+  productionCapabilities   String[]            @default([])
+  socialHandles            Json                @default("{}")
+  creativeDiscipline       CreativeDiscipline?
 
   // Later
-  equipment                 String[] @default([])
-  audienceSize              Int?
-  pastBrandCollaborations   String?
-  creativePhilosophy        String?
-  inspirationCreators       String[] @default([])
-  showreelUrl               String?
+  equipment               String[] @default([])
+  audienceSize            Int?
+  pastBrandCollaborations String?
+  creativePhilosophy      String?
+  inspirationCreators     String[] @default([])
+  showreelUrl             String?
 
   // Style (1–10) — range enforced in app layer
   styleProductionValue Int?
@@ -272,21 +295,21 @@ model StartupProfile {
   userId String @id
 
   // Core
-  companyName              String?
-  industry                 String?
-  locationMarket           String[] @default([])
-  contactPerson            String?
-  contactRole              String?
-  contactEmail             String?
-  typicalBudgetRangeMin    Int?
-  typicalBudgetRangeMax    Int?
-  projectGoal              String[] @default([])
-  desiredLookFeeling       String[] @default([])
-  deliverablesNeeded       String[] @default([])
-  quantityVolume           Int?
-  deadline                 DateTime? @db.Date
-  budgetForProject         Int?
-  contentUsagePlatforms    String[] @default([])
+  companyName           String?
+  industry              String?
+  locationMarket        String[]  @default([])
+  contactPerson         String?
+  contactRole           String?
+  contactEmail          String?
+  typicalBudgetRangeMin Int?
+  typicalBudgetRangeMax Int?
+  projectGoal           String[]  @default([])
+  desiredLookFeeling    String[]  @default([])
+  deliverablesNeeded    String[]  @default([])
+  quantityVolume        Int?
+  deadline              DateTime? @db.Date
+  budgetForProject      Int?
+  contentUsagePlatforms String[]  @default([])
 
   // Important
   companyStage                  CompanyStage?
@@ -328,12 +351,12 @@ model StartupProfile {
 // ════════════════════════════════════════════════════════════════════════════
 
 model Post {
-  id          String    @id @default(cuid())
-  userId      String
-  postType    PostType
-  title       String?
-  description String?
-  mediaUrls   String[]  @default([])
+  id           String   @id @default(cuid())
+  userId       String
+  postType     PostType
+  title        String?
+  description  String?
+  mediaUrls    String[] @default([])
   thumbnailUrl String?
 
   contentType     String?
@@ -380,6 +403,7 @@ model Conversation {
   userA    User      @relation("ParticipantA", fields: [participantA], references: [id], onDelete: Cascade)
   userB    User      @relation("ParticipantB", fields: [participantB], references: [id], onDelete: Cascade)
   messages Message[]
+  projects Project[]
 
   @@unique([participantA, participantB])
   @@index([participantA])
@@ -387,14 +411,14 @@ model Conversation {
 }
 
 model Message {
-  id             String    @id @default(cuid())
+  id             String   @id @default(cuid())
   conversationId String?
   senderId       String
   receiverId     String
   content        String
-  read           Boolean   @default(false)
+  read           Boolean  @default(false)
   matchScore     Float?
-  createdAt      DateTime  @default(now()) @db.Timestamptz
+  createdAt      DateTime @default(now()) @db.Timestamptz
 
   conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User          @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
@@ -413,7 +437,7 @@ model Review {
   reviewerId          String
   reviewedId          String
   projectDescription  String?
-  ratingOverall       Int?     // 1-5, enforced in app
+  ratingOverall       Int? // 1-5, enforced in app
   ratingReliability   Int?
   ratingQuality       Int?
   ratingCollaboration Int?
@@ -443,6 +467,44 @@ model Brief {
 
   @@index([userId])
   @@index([active])
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PROJECTS (the post-match working relationship between a startup and a
+// creator). Sign-off, deliverables, reviews, and eventually escrow all
+// hang off this row. See CLAUDE.md "Commercial model" for the fee
+// structure (10% client / 5% creator) that gets applied at completion.
+// ════════════════════════════════════════════════════════════════════════════
+
+model Project {
+  id             String  @id @default(cuid())
+  // Two parties. Enforced in app code: client.userType must be `startup`,
+  // creator.userType must be `creator`. Prisma can't express that.
+  clientId       String
+  creatorId      String
+  // Optional pointer back to the conversation that led to this project.
+  // Nullable: a project might be created from a brief response or
+  // back-channel without a prior DM.
+  conversationId String?
+
+  title  String
+  status ProjectStatus @default(pending)
+
+  createdAt   DateTime  @default(now()) @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @db.Timestamptz
+  // Set when status transitions to `completed`. Nullable until then.
+  signedOffAt DateTime? @db.Timestamptz
+  // Set when status transitions to `cancelled`.
+  cancelledAt DateTime? @db.Timestamptz
+
+  client       User          @relation("Client", fields: [clientId], references: [id], onDelete: Cascade)
+  creator      User          @relation("Creator", fields: [creatorId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([creatorId])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
 }
 
 // ════════════════════════════════════════════════════════════════════════════
