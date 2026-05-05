@@ -72,14 +72,9 @@ COPY --from=builder --chown=node:node /app/prisma ./prisma
 COPY --chown=node:node scripts/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
-# Filesystem upload target. The host volume is bind-mounted at
-# /app/uploads (NOT under /app/public, deliberately — Next.js's
-# production static-file handler reads its public/ manifest at image
-# build time, so files added at runtime via a volume mount under public/
-# return 404. We serve uploads via a custom route handler at
-# src/app/uploads/[...path]/route.ts which reads from /app/uploads on
-# every request).
-RUN mkdir -p /app/uploads && chown node:node /app/uploads
+# No filesystem upload target — uploads now live in Hetzner Object
+# Storage (S3-compatible bucket in NBG1). See src/lib/s3.ts +
+# src/app/api/upload/route.ts.
 
 USER node
 EXPOSE 3000

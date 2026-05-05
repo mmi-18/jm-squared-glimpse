@@ -57,6 +57,39 @@ never on Netlify, never on Cloudflare Pages.
 - **Container**: Docker on the server only — Mario does not run Docker locally
 - **Image registry**: GitHub Container Registry (`ghcr.io/mmi-18/...`)
 - **CI/CD**: GitHub Actions (build → push to ghcr → SSH-pull on Hetzner)
+- **Object storage**: Hetzner Object Storage (S3-compatible) in NBG1 — same
+  datacenter as the server, internal traffic free. Bucket
+  `jm-squared-glimpse-uploads`, public-read visibility. See
+  `src/lib/s3.ts` for the configured client; `src/app/api/upload/route.ts`
+  is the entry point. Object Lock is **off** (we need to honor GDPR
+  delete-on-request, which Object Lock would prevent).
+
+## Uploads
+
+User uploads (post images, future delivery files, avatars) all flow
+through `src/app/api/upload/route.ts`:
+
+```
+browser → POST /api/upload (multipart)
+       → requireUser() (signed-in only)
+       → s3().send(PutObjectCommand)
+       → Hetzner Object Storage (nbg1)
+       ← { url: https://nbg1.your-objectstorage.com/<bucket>/<key>, ... }
+```
+
+The returned URL is hot-linkable (public-read bucket) — no signed URLs
+needed for posts. When we eventually add private deliveries (Chunk B-2
+messaging attachments / Chunk C work-agreement files), use a separate
+private bucket + signed URLs.
+
+Path-style URLs only (`forcePathStyle: true` in s3.ts). Hetzner's
+load balancer doesn't reliably support virtual-hosted style.
+
+Filesystem-upload mode (the original Chunk B that landed before
+the bucket existed) is gone — no more `/home/mario/glimpse/uploads/`
+bind mount, no more `src/app/uploads/[...path]/route.ts`. If a
+deploy ever needs to roll back to filesystem mode, both git history
+and the prior route handler can be restored.
 
 ## Prisma migrations
 

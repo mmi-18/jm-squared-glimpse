@@ -1,28 +1,32 @@
 import { NextResponse } from "next/server";
-import { writeFile, mkdir } from "node:fs/promises";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { requireUser } from "@/lib/auth";
+import { S3_BUCKET, publicUrlFor, s3 } from "@/lib/s3";
 
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/upload
  *
- * Multipart upload endpoint. Stores files on the server's filesystem
- * under public/uploads/ — which is the volume target the host binds at
- * /home/mario/glimpse/uploads. Returns a stable URL that can be used as
- * an `<img>` / `<video>` src.
- *
- * Why filesystem (not S3/R2): Mario's call (cost-conscious MVP, no
- * external bucket vendor). Hetzner Object Storage / Cloudflare R2 is
- * a swap-in later when storage scales past comfortable disk sizes.
+ * Multipart upload endpoint. Streams the body straight to Hetzner
+ * Object Storage (NBG1 bucket — same datacenter as this server, free
+ * internal traffic). Returns the public URL the browser can fetch
+ * directly without going back through this server.
  *
  * Limits:
- *   - max 10 MB per file (raised in env later if needed)
+ *   - max 10 MB per file
  *   - jpg / png / webp / gif / mp4 / quicktime only
  *
- * Auth: sign-in required. Anonymous uploads are not allowed.
+ * Auth: sign-in required.
+ *
+ * Notes vs the previous filesystem-backed version:
+ *   - No more bind-mount on the host — bucket is the source of truth.
+ *   - URLs returned are absolute (https://...) so they survive any
+ *     change of glimpse domain or backend host.
+ *   - public-read bucket visibility means the returned URL is
+ *     directly hot-linkable from `<img>` / `<video>` / etc. — no
+ *     server roundtrip per fetch.
  */
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -86,20 +90,22 @@ export async function POST(request: Request) {
     );
   }
 
-  // randomUUID produces 36-char hex with dashes — collision risk on
-  // 10^36 namespace is microscopic, no need for nanoid here.
-  const filename = `${randomUUID()}.${ext}`;
-  // /app/uploads — bind-mounted from host's /home/mario/glimpse/uploads.
-  // Served back to the browser via src/app/uploads/[...path]/route.ts.
-  const uploadsDir = path.join(process.cwd(), "uploads");
-  await mkdir(uploadsDir, { recursive: true });
-  const target = path.join(uploadsDir, filename);
-
+  const key = `${randomUUID()}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
-  await writeFile(target, buffer);
+
+  await s3().send(
+    new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: key,
+      Body: buffer,
+      ContentType: file.type,
+      // Long cache: filenames are uuids, content is immutable per URL.
+      CacheControl: "public, max-age=31536000, immutable",
+    }),
+  );
 
   return NextResponse.json({
-    url: `/uploads/${filename}`,
+    url: publicUrlFor(key),
     contentType: file.type,
     size: file.size,
   });

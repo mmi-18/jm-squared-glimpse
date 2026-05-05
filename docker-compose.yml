@@ -5,13 +5,13 @@
 # `docker compose up -d` against THIS file).
 #
 # Required adjacent files on the server:
-#   - /home/mario/glimpse/.env          DATABASE_URL, DIRECT_URL, BETTER_AUTH_*,
-#                                NEXT_PUBLIC_SITE_URL  (gitignored;
-#                                placed manually during bring-up)
-#   - /home/mario/glimpse/uploads/      named volume target — created at bring-up
-#                                with `mkdir -p`. Container runs as the
-#                                `node` user (uid 1000) which matches the
-#                                host's `mario`, so no chown needed.
+#   - /home/mario/glimpse/.env   DATABASE_URL, DIRECT_URL, BETTER_AUTH_*,
+#                                NEXT_PUBLIC_SITE_URL, HETZNER_S3_*
+#                                (gitignored; placed manually during bring-up)
+#
+# No host volumes — user uploads live in Hetzner Object Storage (NBG1
+# bucket, S3-compatible API via @aws-sdk/client-s3). The previous
+# /home/mario/glimpse/uploads/ bind mount has been removed.
 #
 # Traefik integration (the running Traefik container is configured with):
 #   - Network:        web   (external, shared with this service)
@@ -40,14 +40,11 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    volumes:
-      # Mount at /app/uploads (NOT under public/). Next.js's production
-      # static-file handler reads its public/ manifest at image build
-      # time, so files added later via this mount return 404 even though
-      # they're on disk. Instead, src/app/uploads/[...path]/route.ts
-      # serves them via a route handler that reads from /app/uploads on
-      # every request.
-      - ./uploads:/app/uploads
+    # No volumes — uploads now live in Hetzner Object Storage (NBG1
+    # bucket), reachable via the HETZNER_S3_* env vars in .env. The
+    # /home/mario/glimpse/uploads/ host directory is no longer used
+    # and can be deleted once the migrated test files are confirmed
+    # in the bucket.
     networks:
       - web
     labels:
