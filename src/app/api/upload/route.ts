@@ -15,8 +15,11 @@ export const dynamic = "force-dynamic";
  * directly without going back through this server.
  *
  * Limits:
- *   - max 10 MB per file
- *   - jpg / png / webp / gif / mp4 / quicktime only
+ *   - max 50 MB per file (raised from 10 MB in Chunk E so creators
+ *     can deliver export-quality video; bigger raws still need an
+ *     external link, dropped in the delivery message)
+ *   - allowed mimes cover post media + delivery formats: image,
+ *     video, audio, pdf, zip
  *
  * Auth: sign-in required.
  *
@@ -27,16 +30,36 @@ export const dynamic = "force-dynamic";
  *   - public-read bucket visibility means the returned URL is
  *     directly hot-linkable from `<img>` / `<video>` / etc. — no
  *     server roundtrip per fetch.
+ *
+ * Future: 50 MB+ deliveries would need browser-direct presigned-URL
+ * uploads (so the bytes don't pass through this Next.js server, which
+ * runs on a 4 GB Hetzner box). When that lands, this route becomes a
+ * thin "give me a presigned PUT URL" endpoint instead of a proxy.
  */
 
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_BYTES = 50 * 1024 * 1024; // 50 MB
 const ALLOWED: Record<string, string> = {
+  // Images
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/webp": "webp",
   "image/gif": "gif",
+  // Video
   "video/mp4": "mp4",
   "video/quicktime": "mov",
+  "video/webm": "webm",
+  "video/x-matroska": "mkv",
+  // Audio (music producers, voice-overs)
+  "audio/mpeg": "mp3",
+  "audio/wav": "wav",
+  "audio/x-wav": "wav",
+  "audio/aac": "aac",
+  "audio/flac": "flac",
+  // Documents (briefs, storyboards, signed contracts)
+  "application/pdf": "pdf",
+  // Archives (project files: .prproj/.fcpx/.drp inside .zip)
+  "application/zip": "zip",
+  "application/x-zip-compressed": "zip",
 };
 
 export async function POST(request: Request) {

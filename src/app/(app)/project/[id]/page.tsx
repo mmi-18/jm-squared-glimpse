@@ -9,6 +9,11 @@ import { ReviewForm } from "./review-form";
 import { AgreementPanel } from "@/components/project/agreement-panel";
 import { PendingCancelRow } from "@/components/project/pending-cancel-row";
 import { PaymentStatusCard } from "@/components/project/payment-status-card";
+import { DeliverySubmitForm } from "@/components/project/delivery-submit-form";
+import {
+  DeliveryPanel,
+  type DeliveryFile,
+} from "@/components/project/delivery-panel";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -73,6 +78,9 @@ export default async function ProjectPage({
         },
         orderBy: { createdAt: "asc" },
       },
+      // Latest delivery (we only ever have one in v1; the orderBy +
+      // take:1 future-proofs for revision rounds in Chunk G).
+      deliveries: { orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
 
@@ -226,13 +234,42 @@ export default async function ProjectPage({
         />
       )}
 
-      {/* Active+ — the existing project state-machine action bar. */}
+      {/* Active+ — the existing project state-machine action bar
+          (sign-off / cancel / undo). Mark-as-delivered is now the
+          DeliverySubmitForm below; the bar handles the other
+          transitions. */}
       {project.status !== "pending" && project.status !== "cancelled" && (
         <ProjectActions
           projectId={project.id}
           role={role}
           status={project.status}
           signedOffAt={project.signedOffAt?.toISOString() ?? null}
+        />
+      )}
+
+      {/* Delivery submission (Chunk E) — creator-only, status=active.
+          Replaces the old one-click "Mark as delivered" button with
+          a real upload form. Status flips active → delivered the
+          moment the form is submitted. */}
+      {role === "creator" && project.status === "active" && (
+        <div className="mt-6">
+          <DeliverySubmitForm projectId={project.id} />
+        </div>
+      )}
+
+      {/* Delivery viewer (Chunk E) — both parties see the submitted
+          file manifest + creator's note from the moment status flips
+          to delivered onwards. Manifest is immutable post-submit. */}
+      {project.status !== "pending" && project.deliveries[0] && (
+        <DeliveryPanel
+          delivery={{
+            id: project.deliveries[0].id,
+            message: project.deliveries[0].message,
+            files:
+              (project.deliveries[0].files as unknown as DeliveryFile[]) ?? [],
+            createdAt: project.deliveries[0].createdAt,
+          }}
+          viewerRole={role}
         />
       )}
 

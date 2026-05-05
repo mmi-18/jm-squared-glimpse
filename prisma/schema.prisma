@@ -591,10 +591,47 @@ model Project {
   creator      User          @relation("Creator", fields: [creatorId], references: [id], onDelete: Cascade)
   conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   reviews      Review[]
+  deliveries   Delivery[]
 
   @@index([clientId])
   @@index([creatorId])
   @@index([status])
+  @@index([createdAt(sort: Desc)])
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// DELIVERIES (Chunk E) — files the creator hands over to the client.
+//
+// One Project today has at most one Delivery (1:1) — but the relation
+// is modelled as 1:N from the schema's perspective so that revision
+// rounds (Chunk G) can land without a migration. Each Delivery is one
+// "I'm submitting this version" event, with N files attached.
+//
+// `files` is JSONB: `[{ name, url, sizeBytes, contentType }, …]`. We
+// preserve the original filename so clients download
+// "final-cut-v2.mp4" instead of a uuid; the URL points to the bucket.
+//
+// Bucket policy: today files live alongside posts/messages in the
+// public-read bucket (jm-squared-glimpse-uploads). URLs are uuid-keyed
+// so they're not enumerable, and the application enforces who sees
+// the URLs. When we go private (separate bucket + signed URLs), only
+// the URL mint logic changes — schema stays identical.
+// ════════════════════════════════════════════════════════════════════════════
+
+model Delivery {
+  id        String   @id @default(cuid())
+  projectId String
+  // Optional creator note — "here's the final cut, raws are too big
+  // for the platform so I dropped them in your shared Drive folder."
+  message   String?
+  // Array of `{ name, url, sizeBytes, contentType }` per uploaded file.
+  // Empty array is allowed (`message` carries the meaning then).
+  files     Json     @default("[]")
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
   @@index([createdAt(sort: Desc)])
 }
 

@@ -135,6 +135,54 @@ UI surfaces:
   agreement and spawns straight into `active` — handy for exercising
   the mark-delivered/sign-off flow without the handshake.
 
+## Deliveries (Chunk E)
+
+Creators hand finished work to clients via the **delivery** mechanism
+on `/project/<id>`. Status `active` → creator sees an inline upload
+panel (`<DeliverySubmitForm>`); they pick one or more files (each
+uploads to the bucket the moment it's selected) plus an optional
+note, and click "Submit delivery" — which:
+
+1. Persists a new `Delivery` row with the file manifest (Json) +
+   note
+2. Flips project status `active → delivered`
+
+Both happen in a single transaction so partial state is impossible.
+
+The Delivery model is 1:N from Project on purpose, even though v1
+only ever creates one Delivery per project. The shape is ready for
+revision rounds (Chunk G) — submit-revisions will create an
+additional Delivery row and bounce status back to `active`.
+
+File manifest shape on `Delivery.files` (JSONB):
+
+```ts
+{ name: string; url: string; sizeBytes: number; contentType: string; }[]
+```
+
+We persist the original filename so clients download
+`final-cut.mp4`, not the uuid the bucket key uses.
+
+Upload route (`/api/upload`) limits as of Chunk E:
+
+- 50 MB per file (covers most exported videos; bigger raws need to
+  be shared via external link in the delivery message)
+- mimes: image/* (jpg/png/webp/gif), video/* (mp4/mov/webm/mkv),
+  audio/* (mp3/wav/aac/flac), application/pdf, application/zip
+
+Bucket policy: today deliveries land in the same public-read bucket
+as posts/messages. URLs are uuid-keyed (high entropy, not
+enumerable), and the application enforces who sees them — the
+delivery panel only renders when the viewer is a project party. For
+production-grade privacy (sensitive client material), the upgrade
+path is a separate private bucket + signed URLs minted per request;
+the schema is already ready for it (only `s3.ts` changes).
+
+The legacy one-click "Mark as delivered" button is gone. The
+`markDelivered` server action still exists as a shim that calls
+`submitDelivery` with empty files + a placeholder message — used by
+older tests / dev tools, not the UI.
+
 ## Money flow (Chunk F-prep)
 
 The full state machine now passes through a deposit gate. Both

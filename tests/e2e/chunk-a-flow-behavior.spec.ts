@@ -6,15 +6,17 @@ import "dotenv/config";
  * End-to-end smoke for Chunk A's full flow:
  *
  *   Voltfang (startup, client) creates a project via /dev/project/new
- *   Kiri (creator) marks it delivered
+ *   Kiri (creator) submits a delivery (Chunk E — uploads a tiny PNG,
+ *     then submits, which flips status to delivered)
  *   Voltfang signs off → status=completed
  *   Voltfang submits review (released=false, blind)
  *   Kiri submits review (both flip to released=true atomically)
  *   Both reviews are visible on the project page
  *
  * Cleanup: at end of test (passed or failed), the test project (and
- * its cascaded reviews) are deleted via Prisma so we don't accumulate
- * stale rows in production. Identified by a smoke-stamped title.
+ * its cascaded reviews + deliveries) are deleted via Prisma so we
+ * don't accumulate stale rows in production. Identified by a
+ * smoke-stamped title.
  */
 
 const KIRI_ID = "fc99f0ee-f9fb-4399-91a5-a87f54ff1379";
@@ -93,17 +95,32 @@ test("end-to-end: create → deliver → sign off → both review", async ({
     await expect(voltfang.locator("body")).toContainText(/In progress/);
 
     // ════════════════════════════════════════════════════════════════
-    // 2. Kiri sees the project in her inbox + marks it delivered
+    // 2. Kiri sees the project in her inbox + submits a delivery
+    //    (Chunk E — upload a 1×1 PNG + submit, which flips status
+    //    active → delivered atomically)
     // ════════════════════════════════════════════════════════════════
     await kiri.goto("/inbox");
     await expect(kiri.locator("body")).toContainText(PROJECT_TITLE);
 
     await kiri.goto(`/project/${createdProjectId}`);
-    await kiri
-      .getByRole("button", { name: /mark as delivered/i })
-      .click();
+    // Tiny 1×1 transparent PNG — same payload the messaging /
+    // delivery smokes use
+    const TINY_PNG = Buffer.from(
+      "89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4" +
+        "890000000D4944415478DA63FCFFFF3F0300050001A55C9DCD0000000049454E44AE426082",
+      "hex",
+    );
+    await kiri.locator('input[type="file"]').setInputFiles({
+      name: "smoke.png",
+      mimeType: "image/png",
+      buffer: TINY_PNG,
+    });
+    await expect(kiri.locator("body")).not.toContainText(/Uploading \d+/, {
+      timeout: 15_000,
+    });
+    await kiri.getByRole("button", { name: /^Submit delivery$/i }).click();
 
-    // After action runs, the page refreshes; assert new state
+    // After submission, page refreshes; assert new state
     await expect(kiri.locator("body")).toContainText(
       /Awaiting client approval/,
       { timeout: 10_000 },

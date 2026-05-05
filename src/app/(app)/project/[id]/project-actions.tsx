@@ -2,13 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  CheckCircle2,
-  Loader2,
-  Send,
-  Undo2,
-  X,
-} from "lucide-react";
+import { CheckCircle2, Loader2, Undo2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,7 +14,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   cancelProject,
-  markDelivered,
   signOffProject,
   undoSignOff,
 } from "@/app/(app)/project/actions";
@@ -38,11 +31,17 @@ const UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
  *  status      | client sees                       | creator sees
  *  ------------+-----------------------------------+--------------------
  *  pending     | Cancel                            | Cancel
- *  active      | Cancel                            | Mark as delivered + Cancel
+ *  active      | Cancel                            | (DeliverySubmitForm
+ *               |                                   |  handles the flip)
  *  delivered   | Mark complete & sign off + Cancel | (waiting message)
  *  completed   | Undo sign-off (within 24h)        | (read-only)
  *  cancelled   | (no actions; component not       | (no actions; component not
  *               rendered by the page)             | rendered by the page)
+ *
+ * Chunk E note: the old creator+active "Mark as delivered" button is
+ * gone — that role+status combo is now handled by the upload form
+ * (DeliverySubmitForm), which atomically creates a Delivery row +
+ * flips status when the creator submits.
  */
 export function ProjectActions({
   projectId,
@@ -82,20 +81,6 @@ export function ProjectActions({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        {role === "creator" && status === "active" && (
-          <Button
-            onClick={() => run(() => markDelivered(projectId))}
-            disabled={pending}
-          >
-            {pending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            Mark as delivered
-          </Button>
-        )}
-
         {role === "client" && status === "delivered" && (
           <Button
             onClick={() => setConfirmSignOff(true)}

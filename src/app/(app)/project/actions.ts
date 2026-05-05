@@ -29,30 +29,90 @@ async function loadProjectAsParty(projectId: string, userId: string) {
 }
 
 /**
- * Creator: mark a project as delivered. Status must be `active`.
+ * Creator: submit a delivery + flip status from `active` to `delivered`
+ * in one transaction.
  *
- * In Chunk B (file uploads) this becomes "submit a delivery"; for now
- * it's a single status flip with no attached files.
+ * Files come in pre-uploaded — the browser hits `/api/upload` per
+ * file and gets back `{name, url, sizeBytes, contentType}` for each.
+ * The action just persists the manifest + flips status. Letting the
+ * server-side delivery action upload bytes too would mean buffering
+ * potentially 50MB on the Next.js heap, which the 4GB Hetzner box
+ * doesn't love.
+ *
+ * Validation: at least one of files/message must be non-empty —
+ * delivering "nothing, with no note" is almost always a misclick.
+ * Allowing empty strings lets us still mock zero-file deliveries
+ * during dev (just type "test").
  */
-export async function markDelivered(projectId: string) {
+export async function submitDelivery(args: {
+  projectId: string;
+  message?: string;
+  files: Array<{
+    name: string;
+    url: string;
+    sizeBytes: number;
+    contentType: string;
+  }>;
+}) {
   const me = await requireUser();
-  const project = await loadProjectAsParty(projectId, me.id);
+  const project = await loadProjectAsParty(args.projectId, me.id);
   if (project.creatorId !== me.id) {
-    throw new Error("Only the creator can mark a project delivered");
+    throw new Error("Only the creator can submit a delivery");
   }
   if (project.status !== "active") {
     throw new Error(
-      `Cannot mark delivered from status "${project.status}"`,
+      `Cannot submit delivery from status "${project.status}"`,
     );
   }
 
-  await db.project.update({
-    where: { id: projectId },
-    data: { status: "delivered" },
+  const message = (args.message ?? "").trim();
+  if (args.files.length === 0 && !message) {
+    throw new Error("Add at least one file or a message");
+  }
+
+  // Sanity-check the file manifest. We don't re-verify the URLs
+  // against the bucket here (extra round-trip per file, no win) —
+  // the upload route is auth-gated so the URLs we get back came from
+  // a signed-in session.
+  for (const f of args.files) {
+    if (!f.url || !f.name || typeof f.sizeBytes !== "number") {
+      throw new Error("Invalid file manifest");
+    }
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.delivery.create({
+      data: {
+        projectId: project.id,
+        message: message || null,
+        files: args.files,
+      },
+    });
+    await tx.project.update({
+      where: { id: project.id },
+      data: { status: "delivered" },
+    });
   });
 
-  revalidatePath(`/project/${projectId}`);
+  revalidatePath(`/project/${args.projectId}`);
+  revalidatePath("/projects");
   return { ok: true };
+}
+
+/**
+ * Backwards-compat shim — older callers (tests / dev tools) still
+ * import `markDelivered`. Forwards to `submitDelivery` with an empty
+ * file manifest + a placeholder message so the new validation passes.
+ *
+ * Direct UI callers should use `submitDelivery` so the user gets a
+ * real upload affordance instead of a one-click status flip.
+ */
+export async function markDelivered(projectId: string) {
+  return submitDelivery({
+    projectId,
+    files: [],
+    message: "(no files attached)",
+  });
 }
 
 /**
