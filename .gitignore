@@ -19,6 +19,9 @@
 /tests/e2e/.smoke
 /.smoke
 
+# Personal reference docs containing secrets — never commit
+*.local.md
+
 # next.js
 /.next/
 /out/
