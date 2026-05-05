@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Pencil, Check, RotateCcw, Loader2 } from "lucide-react";
 import { SpanGrid } from "@/components/grid/span-grid";
 import { ProfileCellRenderer } from "@/components/grid/cell-renderers";
@@ -124,6 +124,30 @@ export function ProfileContentGrid({
     applyOverrides(basePortfolio, asOverrides(savedPortfolioLayout)),
   );
 
+  // Track whether either section is in customize mode. While editing, we
+  // don't want server-side post-list updates (e.g. after a deletePost
+  // revalidate) to clobber the user's in-progress drag/resize state.
+  const portfolioEditingRef = useRef(false);
+  const aboutEditingRef = useRef(false);
+
+  // When the parent server component re-fetches (router.refresh() after
+  // a delete, layout save, etc.), the `posts`/`reviews`/`profile` props
+  // change but our cell state was seeded once via useState's initializer
+  // and would otherwise stick to the old list. This was the "delete a
+  // post → tile stays until full page refresh" bug. Re-seed when the
+  // base cells (computed from props) change.
+  useEffect(() => {
+    if (portfolioEditingRef.current) return;
+    setPortfolioCells(
+      applyOverrides(basePortfolio, asOverrides(savedPortfolioLayout)),
+    );
+  }, [basePortfolio, savedPortfolioLayout]);
+
+  useEffect(() => {
+    if (aboutEditingRef.current) return;
+    setAboutCells(applyOverrides(baseAbout, asOverrides(savedAboutLayout)));
+  }, [baseAbout, savedAboutLayout]);
+
   return (
     <div className="space-y-10">
       {portfolioCells.length > 0 && (
@@ -134,6 +158,7 @@ export function ProfileContentGrid({
           cells={portfolioCells}
           onCellsChange={setPortfolioCells}
           kind="portfolio"
+          editingRef={portfolioEditingRef}
         />
       )}
 
@@ -144,6 +169,7 @@ export function ProfileContentGrid({
         cells={aboutCells}
         onCellsChange={setAboutCells}
         kind="about"
+        editingRef={aboutEditingRef}
       />
     </div>
   );
@@ -156,6 +182,7 @@ function EditableSection({
   cells,
   onCellsChange,
   kind,
+  editingRef,
 }: {
   title: string;
   isOwner: boolean;
@@ -165,9 +192,18 @@ function EditableSection({
     React.SetStateAction<GridCell<ProfileCellData>[]>
   >;
   kind: "portfolio" | "about";
+  /** Mirrors `editing` for the parent so the prop-sync useEffect knows
+   *  to skip re-seeding state while the user is mid-customize. */
+  editingRef: React.MutableRefObject<boolean>;
 }) {
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  // Mirror local `editing` state into the parent's ref so the prop-sync
+  // effect can opt out of re-seeding while we're in customize mode.
+  useEffect(() => {
+    editingRef.current = editing;
+  }, [editing, editingRef]);
 
   function onSave() {
     startTransition(async () => {
