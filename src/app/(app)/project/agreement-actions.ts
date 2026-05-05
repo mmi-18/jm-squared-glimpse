@@ -170,6 +170,81 @@ export async function hireCreator(args: {
   return { ok: true, projectId: project.id };
 }
 
+/**
+ * Creator → startup: open a project with a draft agreement (the
+ * "Pitch" flow). Mirror of `hireCreator`, with the roles flipped:
+ * the creator's acceptance is pre-set and the startup has to accept
+ * before status flips to `active`.
+ *
+ * Same form, same Project record, same agreement panel — just the
+ * other entry door. Either side can amend after creation; whoever
+ * amends has their acceptance set, and the counterparty's cleared.
+ */
+export async function proposeProject(args: {
+  startupId: string;
+  agreement: AgreementInput;
+}): Promise<{ ok: true; projectId: string } | { ok: false; errors: string[] }> {
+  const me = await requireUser();
+  if (me.userType !== "creator") {
+    return {
+      ok: false,
+      errors: ["Only creator accounts can pitch a project"],
+    };
+  }
+  if (args.startupId === me.id) {
+    return { ok: false, errors: ["You can't pitch yourself"] };
+  }
+
+  const startup = await db.user.findUnique({
+    where: { id: args.startupId },
+    select: { id: true, userType: true },
+  });
+  if (!startup || startup.userType !== "startup") {
+    return { ok: false, errors: ["Company not found"] };
+  }
+
+  const errors = validate(args.agreement);
+  if (errors.length) return { ok: false, errors };
+
+  const conv = await db.conversation.findFirst({
+    where: {
+      OR: [
+        { participantA: me.id, participantB: startup.id },
+        { participantA: startup.id, participantB: me.id },
+      ],
+    },
+    select: { id: true },
+  });
+
+  const data = toAgreementData(args.agreement);
+  const project = await db.project.create({
+    data: {
+      clientId: startup.id,
+      creatorId: me.id,
+      conversationId: conv?.id ?? null,
+      status: "pending",
+      title: data.title,
+      scope: data.scope,
+      deliverables: data.deliverables,
+      priceCents: data.priceCents,
+      currency: "EUR",
+      deadline: data.deadline,
+      revisionRounds: data.revisionRounds,
+      usageRights: data.usageRights,
+      // The pitcher (creator) implicitly accepts by submitting.
+      // The client still needs to accept before work starts.
+      clientAcceptedAt: null,
+      creatorAcceptedAt: new Date(),
+    },
+  });
+
+  revalidatePath(`/project/${project.id}`);
+  revalidatePath(`/startup/${startup.id}`);
+  revalidatePath("/inbox");
+  revalidatePath("/projects");
+  return { ok: true, projectId: project.id };
+}
+
 async function loadPendingProjectAsParty(projectId: string, userId: string) {
   const project = await db.project.findFirst({
     where: {

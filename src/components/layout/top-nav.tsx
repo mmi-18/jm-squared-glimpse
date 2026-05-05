@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Briefcase,
   Inbox,
   Sparkles,
   LayoutGrid,
@@ -25,7 +26,15 @@ type NavUser =
     }
   | null;
 
-export function TopNav({ user }: { user: NavUser }) {
+export function TopNav({
+  user,
+  projectsAttentionCount = 0,
+}: {
+  user: NavUser;
+  /** Count of projects needing the viewer's action — shown as a
+   *  small numeric badge next to the Projects tab. 0 hides the badge. */
+  projectsAttentionCount?: number;
+}) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -35,15 +44,30 @@ export function TopNav({ user }: { user: NavUser }) {
     router.refresh();
   }
 
+  // Tabs differ slightly per role (startups get Brief; creators don't).
+  // Projects sits next to Inbox for both — "what am I working on" is
+  // more central than "what's new in the world."
   const tabs =
     user?.userType === "startup"
       ? [
           { href: "/feed", label: "Feed", icon: LayoutGrid },
           { href: "/brief", label: "Brief", icon: Sparkles },
+          {
+            href: "/projects",
+            label: "Projects",
+            icon: Briefcase,
+            badge: projectsAttentionCount,
+          },
           { href: "/inbox", label: "Inbox", icon: Inbox },
         ]
       : [
           { href: "/feed", label: "Feed", icon: LayoutGrid },
+          {
+            href: "/projects",
+            label: "Projects",
+            icon: Briefcase,
+            badge: projectsAttentionCount,
+          },
           { href: "/inbox", label: "Inbox", icon: Inbox },
         ];
 
@@ -58,18 +82,24 @@ export function TopNav({ user }: { user: NavUser }) {
           <nav className="flex items-center gap-6">
             {tabs.map((t) => {
               const active = pathname?.startsWith(t.href);
+              const badge = ("badge" in t ? t.badge : 0) ?? 0;
               return (
                 <Link
                   key={t.href}
                   href={t.href}
                   className={cn(
-                    "text-sm font-medium transition-colors",
+                    "inline-flex items-center gap-1.5 text-sm font-medium transition-colors",
                     active
                       ? "text-foreground"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {t.label}
+                  {badge > 0 && (
+                    <span className="bg-amber-500 text-white inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums">
+                      {badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}

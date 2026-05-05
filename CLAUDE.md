@@ -102,12 +102,28 @@ State rules (enforced in `src/app/(app)/project/agreement-actions.ts`):
 
 UI surfaces:
 
-- Hire button on `/creator/<id>` (visible to logged-out and
-  logged-in startups; hidden when a creator is viewing another creator).
-  Opens the modal `src/components/project/hire-dialog.tsx`.
+- **Hire** button on `/creator/<id>` (logged-out + startups). Opens
+  `src/components/project/hire-dialog.tsx`. Sets `clientAcceptedAt`
+  on submit.
+- **Pitch** button on `/startup/<id>` (logged-out + creators) —
+  the symmetric counterpart. Opens `src/components/project/pitch-dialog.tsx`
+  and calls `proposeProject` instead of `hireCreator`. Sets
+  `creatorAcceptedAt` on submit. Same form, same Project record,
+  same agreement panel — just the other entry door.
 - `src/components/project/agreement-panel.tsx` renders on
   `/project/<id>` while status=pending — shows the terms grid + each
-  party's acceptance pill + accept/amend buttons.
+  party's acceptance pill + accept/amend buttons. Direction-agnostic.
+- **`/projects` workspace** — top-level tab in both navs. Lists all
+  projects the viewer is on, sectioned by:
+  1. *Needs your attention* (counterparty accepted but you haven't,
+     or you're the client and creator just delivered) — amber banner.
+  2. *In progress* (active + delivered with no action owed)
+  3. *Negotiating* (pending, waiting on counterparty)
+  4. *Completed*
+  5. *Cancelled* (collapsed/dimmed)
+  See `src/lib/projects.ts` for `countNeedsAttention(userId)` (used
+  by the nav badge — fires from `<AppShell>` on every authed request)
+  and `listProjectsForUser(userId)` (used by the page).
 - `/dev/project/new` is still around as a dev shortcut that skips the
   agreement and spawns straight into `active` — handy for exercising
   the mark-delivered/sign-off flow without the handshake.

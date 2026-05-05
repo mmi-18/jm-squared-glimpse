@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Star } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getOldestPendingReviewForUser } from "@/lib/reviews";
+import { countNeedsAttention } from "@/lib/projects";
 import { TopNav } from "@/components/layout/top-nav";
 import { BottomNav } from "@/components/layout/bottom-nav";
 
@@ -11,9 +12,12 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
   // is reminded across every page until they submit. Soft-block entry
   // points (e.g. /dev/project/new, future "Hire again" buttons) read
   // the same lookup to keep the message consistent.
-  const pendingReview = user
-    ? await getOldestPendingReviewForUser(user.id)
-    : null;
+  const [pendingReview, projectsAttentionCount] = user
+    ? await Promise.all([
+        getOldestPendingReviewForUser(user.id),
+        countNeedsAttention(user.id),
+      ])
+    : [null, 0];
 
   return (
     <>
@@ -29,6 +33,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
               }
             : null
         }
+        projectsAttentionCount={projectsAttentionCount}
       />
       {pendingReview && (
         <div
@@ -64,6 +69,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       <BottomNav
         userId={user?.id ?? null}
         userType={(user?.userType as "creator" | "startup" | undefined) ?? null}
+        projectsAttentionCount={projectsAttentionCount}
       />
     </>
   );

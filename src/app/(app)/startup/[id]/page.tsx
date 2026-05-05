@@ -13,6 +13,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { absoluteUrl, getSiteUrl } from "@/lib/site";
 import { MatchScoreBadge } from "@/components/feed/match-score-badge";
 import { MessageDialog } from "@/components/messaging/message-dialog";
+import { PitchDialog } from "@/components/project/pitch-dialog";
 import { Avatar } from "@/components/brand/avatar";
 import { Button } from "@/components/ui/button";
 import { SignOutButton } from "@/components/layout/sign-out-button";
@@ -258,17 +259,32 @@ export default async function StartupProfilePage({
               <MatchScoreBadge score={matchScore} size="lg" />
             )}
             {!isOwn && (
-              <MessageDialog
-                recipientId={user.id}
-                recipientName={user.name ?? "Startup"}
-                matchScore={matchScore}
-                isAuthenticated={!!currentUser}
-                trigger={
-                  <Button>
-                    <MessageCircle className="size-4" /> Send message
-                  </Button>
-                }
-              />
+              <>
+                <MessageDialog
+                  recipientId={user.id}
+                  recipientName={user.name ?? "Startup"}
+                  matchScore={matchScore}
+                  isAuthenticated={!!currentUser}
+                  trigger={
+                    <Button variant="outline">
+                      <MessageCircle className="size-4" /> Send message
+                    </Button>
+                  }
+                />
+                {/* Pitch flow — creator-side mirror of Hire. Available
+                    to logged-in creators (and logged-out viewers, who
+                    are redirected to /login on click). Hidden when a
+                    logged-in startup views another startup. */}
+                {(!currentUser || currentUser.userType === "creator") && (
+                  <PitchDialog
+                    startupId={user.id}
+                    startupName={
+                      profile?.companyName ?? user.name ?? "this company"
+                    }
+                    isAuthenticated={!!currentUser}
+                  />
+                )}
+              </>
             )}
           </div>
         </div>
