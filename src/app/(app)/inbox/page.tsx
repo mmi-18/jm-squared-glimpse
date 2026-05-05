@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { CheckCircle2, Clock, Send } from "lucide-react";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { MatchScoreBadge } from "@/components/feed/match-score-badge";
@@ -26,7 +27,7 @@ export default async function InboxPage() {
     c.participantA === currentUser.id ? c.participantB : c.participantA,
   );
 
-  const [users, lastMsgs, unreadRows] = await Promise.all([
+  const [users, lastMsgs, unreadRows, projects] = await Promise.all([
     otherIds.length > 0
       ? db.user.findMany({
           where: { id: { in: otherIds } },
@@ -42,6 +43,19 @@ export default async function InboxPage() {
     db.message.findMany({
       where: { receiverId: currentUser.id, read: false },
       select: { conversationId: true },
+    }),
+    // Active project surface: anything that isn't cancelled, both sides
+    db.project.findMany({
+      where: {
+        OR: [{ clientId: currentUser.id }, { creatorId: currentUser.id }],
+        status: { not: "cancelled" },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 8,
+      include: {
+        client: { select: { id: true, name: true, image: true } },
+        creator: { select: { id: true, name: true, image: true } },
+      },
     }),
   ]);
 
@@ -72,12 +86,94 @@ export default async function InboxPage() {
     );
   });
 
+  // Surface projects that need the viewer's attention first
+  // (delivered → client should sign off; active → creator is working).
+  const projectsNeedingAttention = projects.filter((p) => {
+    if (p.clientId === currentUser.id && p.status === "delivered") return true;
+    if (p.creatorId === currentUser.id && p.status === "active") return true;
+    return false;
+  });
+  const otherProjects = projects.filter(
+    (p) => !projectsNeedingAttention.includes(p),
+  );
+  const orderedProjects = [...projectsNeedingAttention, ...otherProjects];
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 md:px-6">
       <h1 className="text-3xl font-medium tracking-tight">Inbox</h1>
       <p className="text-muted-foreground mt-1 text-sm">
         Sorted by match score — your highest-fit conversations are on top.
       </p>
+
+      {orderedProjects.length > 0 && (
+        <section className="mt-8">
+          <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Projects
+          </h2>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {orderedProjects.map((p) => {
+              const role: "client" | "creator" =
+                p.clientId === currentUser.id ? "client" : "creator";
+              const counterparty =
+                role === "client" ? p.creator : p.client;
+              const needsYou =
+                (role === "client" && p.status === "delivered") ||
+                (role === "creator" && p.status === "active");
+
+              const Icon =
+                p.status === "completed"
+                  ? CheckCircle2
+                  : p.status === "delivered"
+                    ? Clock
+                    : Send;
+
+              return (
+                <Link
+                  key={p.id}
+                  href={`/project/${p.id}`}
+                  className={cn(
+                    "border-border bg-card flex items-center gap-3 rounded-xl border p-3 transition-colors hover:border-foreground/20",
+                    needsYou && "ring-1 ring-foreground/10",
+                  )}
+                >
+                  <Avatar
+                    src={counterparty.image}
+                    name={counterparty.name}
+                    size={36}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{p.title}</p>
+                    <p className="text-muted-foreground truncate text-xs">
+                      with {counterparty.name}
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium",
+                      p.status === "completed"
+                        ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
+                        : p.status === "delivered"
+                          ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                          : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    <Icon className="h-3 w-3" />
+                    {p.status === "delivered" && role === "client"
+                      ? "Awaiting you"
+                      : p.status === "delivered" && role === "creator"
+                        ? "With client"
+                        : p.status === "completed"
+                          ? "Completed"
+                          : p.status === "active"
+                            ? "In progress"
+                            : "Pending"}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <div className="mt-8 space-y-2">
         {conversations.length === 0 ? (

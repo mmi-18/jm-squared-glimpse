@@ -21,6 +21,8 @@ export default function robots(): MetadataRoute.Robots {
           "/membership",
           "/new-post",
           "/brief",
+          "/project",
+          "/project/",
           "/dev",
           "/dev/",
           "/api",
