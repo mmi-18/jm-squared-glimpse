@@ -1,0 +1,35 @@
+name: Cron — release stale reviews
+
+# Hits POST /api/cron/release-stale-reviews on the live site daily.
+# Secret used: CRON_SECRET (set both in this repo's Actions secrets AND
+# in /home/mario/glimpse/.env on the server — they must match).
+#
+# Schedule note: GitHub cron uses UTC and may delay runs under heavy
+# Actions load. 03:30 UTC ≈ 04:30 Berlin (winter) / 05:30 (summer) —
+# off-peak so the run doesn't compete with morning user activity. The
+# release is idempotent and resilient to skipped days, so a missed
+# 24-hour window only delays release by another day.
+
+on:
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger release endpoint
+        run: |
+          set -e
+          response=$(curl -sS \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -w "\nHTTP %{http_code}" \
+            https://glimpse.jm-squared.com/api/cron/release-stale-reviews)
+          echo "$response"
+          # Fail the job if the HTTP status isn't 2xx.
+          echo "$response" | tail -1 | grep -q "HTTP 2" || {
+            echo "::error::Cron endpoint returned non-2xx status"
+            exit 1
+          }
