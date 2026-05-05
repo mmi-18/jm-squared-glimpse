@@ -544,11 +544,41 @@ model Project {
   // Reuses the same enum as the StartupProfile preference field.
   usageRights    UsageRights?
 
-  // Per-party acceptance timestamps. Both non-null AND status=pending
-  // → server action flips to status=active. An amendment clears the
-  // *non-amending* party's acceptance.
+  // Per-party acceptance timestamps. Both non-null AND `paidAt` set
+  // → server action flips to status=active. (Pre-Chunk-F-prep this
+  // flipped on both-accept alone; now the deposit gate sits between.)
+  // An amendment clears the *non-amending* party's acceptance.
   clientAcceptedAt  DateTime? @db.Timestamptz
   creatorAcceptedAt DateTime? @db.Timestamptz
+
+  // ─── Deposit / payout (Chunk F-prep) ──────────────────────────────────────
+  // Money flow lives on the same Project row so we don't need a
+  // separate Payment table while everything is single-currency,
+  // single-creator, single-deposit. When team-ups (docs/IDEAS.md)
+  // arrive, this needs to migrate to a per-member ProjectMember
+  // join with its own payment fields.
+  //
+  // `paidAt` — set by `markProjectPaid` when the client confirms
+  //   the deposit. Both-accepted + paidAt=null = "Deposit €X to
+  //   start" CTA. Both-accepted + paidAt!=null flips status →
+  //   active. NB: this is a placeholder timestamp — Chunk F-stripe
+  //   will replace the action with a real Stripe Checkout session
+  //   and have the webhook set this column.
+  paidAt                  DateTime? @db.Timestamptz
+  // `stripeCheckoutSessionId` — null today; populated when Chunk
+  //   F-stripe lands. Lets us reconcile deposits against Stripe's
+  //   dashboard and dedupe webhook deliveries.
+  stripeCheckoutSessionId String?
+  // `payoutScheduledFor` — set when client signs off, equal to
+  //   `signedOffAt + 24h`. The 24-hour undo window protects this:
+  //   if `undoSignOff` fires within 24h, this clears too. The
+  //   daily cron releases payouts where this is past + still null
+  //   in `payoutReleasedAt`.
+  payoutScheduledFor      DateTime? @db.Timestamptz
+  // `payoutReleasedAt` — set by the daily cron when it processes
+  //   the release. Today this is just a flag; Chunk F-stripe
+  //   replaces it with `stripe.transfers.create(...)`.
+  payoutReleasedAt        DateTime? @db.Timestamptz
 
   createdAt   DateTime  @default(now()) @db.Timestamptz
   updatedAt   DateTime  @updatedAt @db.Timestamptz

@@ -294,12 +294,18 @@ export async function amendAgreement(args: {
 }
 
 /**
- * Caller accepts the current agreement terms. If both sides have now
- * accepted, the same transaction flips status `pending → active`.
+ * Caller accepts the current agreement terms. Sets the appropriate
+ * `*AcceptedAt` timestamp.
+ *
+ * Note (Chunk F-prep): both-accepted *no longer* flips status to
+ * active by itself. The status flip now waits for the deposit —
+ * `markProjectPaid` is what completes the transition. This action
+ * just records that the terms are mutually agreed; the project
+ * remains `pending` until money lands.
  */
 export async function acceptAgreement(
   projectId: string,
-): Promise<{ ok: true; nowActive: boolean } | { ok: false; error: string }> {
+): Promise<{ ok: true; bothAccepted: boolean } | { ok: false; error: string }> {
   const me = await requireUser();
   const project = await loadPendingProjectAsParty(projectId, me.id);
 
@@ -321,24 +327,81 @@ export async function acceptAgreement(
   const isClient = me.id === project.clientId;
   const now = new Date();
 
-  // Determine whether *the other side* is already accepted. If yes,
-  // this acceptance flips status to active.
-  const counterAccepted = isClient
-    ? project.creatorAcceptedAt != null
-    : project.clientAcceptedAt != null;
-
   await db.project.update({
     where: { id: project.id },
     data: {
       clientAcceptedAt: isClient ? now : project.clientAcceptedAt,
       creatorAcceptedAt: isClient ? project.creatorAcceptedAt : now,
-      status: counterAccepted ? "active" : "pending",
+      // Status stays `pending` — the deposit gate (markProjectPaid)
+      // is what flips it to `active`.
+    },
+  });
+
+  const bothAccepted =
+    isClient
+      ? project.creatorAcceptedAt != null
+      : project.clientAcceptedAt != null;
+
+  revalidatePath(`/project/${projectId}`);
+  return { ok: true, bothAccepted };
+}
+
+/**
+ * Client confirms the deposit. Placeholder for Chunk F-stripe — once
+ * we have Stripe keys, this gets replaced by `createCheckoutSession`
+ * + a webhook handler that sets `paidAt` server-side. For now, the
+ * client clicks "Deposit €X to start" and we set the timestamp
+ * directly (no money actually moves).
+ *
+ * Side effects:
+ *   - `paidAt = now()`
+ *   - status flips `pending → active` (preconditions: both-accepted)
+ *
+ * Only callable by the client party. Creators can't deposit on
+ * their own project — that's a "client side of the table" action.
+ */
+export async function markProjectPaid(
+  projectId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const me = await requireUser();
+  const project = await db.project.findFirst({
+    where: {
+      id: projectId,
+      OR: [{ clientId: me.id }, { creatorId: me.id }],
+    },
+  });
+  if (!project) return { ok: false, error: "Project not found" };
+  if (project.clientId !== me.id) {
+    return {
+      ok: false,
+      error: "Only the client can deposit on a project",
+    };
+  }
+  if (project.status !== "pending") {
+    return {
+      ok: false,
+      error: `Cannot deposit — project is already ${project.status}`,
+    };
+  }
+  if (!project.clientAcceptedAt || !project.creatorAcceptedAt) {
+    return {
+      ok: false,
+      error: "Both parties must accept the terms before depositing",
+    };
+  }
+  if (project.paidAt) {
+    return { ok: false, error: "Already paid" };
+  }
+
+  await db.project.update({
+    where: { id: project.id },
+    data: {
+      paidAt: new Date(),
+      status: "active",
     },
   });
 
   revalidatePath(`/project/${projectId}`);
-  if (counterAccepted) {
-    revalidatePath("/inbox");
-  }
-  return { ok: true, nowActive: counterAccepted };
+  revalidatePath("/projects");
+  return { ok: true };
 }

@@ -43,6 +43,13 @@ These rates are **business-policy constants**. When implementing
 payment flows, reference this section, do not hard-code different
 numbers in code without checking here first.
 
+## Backlog of ideas
+
+Design notes Mario wants to come back to but isn't building today
+live in `docs/IDEAS.md`. Look there before starting any non-trivial
+new feature — it's the place we record "remember this for later"
+so we don't keep re-discovering ideas.
+
 ## Stack reference
 
 This project is **self-hosted on Hetzner** behind Traefik — never on Vercel,
@@ -127,6 +134,57 @@ UI surfaces:
 - `/dev/project/new` is still around as a dev shortcut that skips the
   agreement and spawns straight into `active` — handy for exercising
   the mark-delivered/sign-off flow without the handshake.
+
+## Money flow (Chunk F-prep)
+
+The full state machine now passes through a deposit gate. Both
+parties accept the agreement, then the **client** has to deposit
+before status flips `pending → active`.
+
+```
+pending  ↶  drafting / accepting / amending
+   ↓
+pending  ↶  both-accepted, awaiting deposit  ← Deposit €X CTA
+   ↓
+active   ↶  deposit landed, work happening
+   ↓
+delivered ↶ creator submitted, awaiting sign-off
+   ↓
+completed ↶ client signed off; payoutScheduledFor = signedOffAt + 24h
+   ↓                                           (24h undo window)
+completed ↶ payoutReleasedAt set by daily cron after that window
+```
+
+**Critically: this is mock money.** The "Deposit" button is
+implemented by `markProjectPaid` in `agreement-actions.ts`, which
+just stamps `paidAt = now()`. No Stripe involved. The "Payout
+released" timestamp is similarly set by the cron without any actual
+transfer. The intent is to ship the workflow and UX *now*, then
+bolt real Stripe Checkout in front of `markProjectPaid` and a real
+`stripe.transfers.create()` into the cron in **Chunk F-stripe**
+later — when Mario has Stripe keys + a registered company entity.
+
+Schema fields on `Project` (all on the same row, all nullable):
+
+- `paidAt` — set when the client confirms the deposit
+- `stripeCheckoutSessionId` — null today; populated by F-stripe
+- `payoutScheduledFor` — `signedOffAt + 24h`; cleared on `undoSignOff`
+- `payoutReleasedAt` — set by the daily cron when the schedule fires
+
+Cron: `POST /api/cron/release-stale-reviews` (kept the original
+URL for backward compat with the GH Actions workflow). Runs three
+jobs in one pass — review release, 14-day auto-acceptance of stuck
+deliveries, and payout release.
+
+Cancellation: clears `paidAt` + `payoutScheduledFor` (mock refund).
+Edge case worth noting: cancelling AFTER delivery means the creator
+did the work but won't be paid. Arbitration / partial refunds are
+deferred to a future chunk.
+
+Pricing display reads from the agreed `priceCents` × the published
+fees (10% client / 5% creator, see "Commercial model" above) — see
+`PaymentStatusCard` for the rendering. When you change the fee
+percentages, grep for `* 1.1` and `* 0.95` and update both.
 
 ## Uploads
 

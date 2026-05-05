@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 
 const UNDO_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
+const PAYOUT_DELAY_MS = UNDO_WINDOW_MS; // payout fires when undo window closes
 
 /**
  * Project state-machine helpers. The schema's `status` enum is
@@ -58,6 +59,12 @@ export async function markDelivered(projectId: string) {
  * Client: sign off and complete the project. Status must be `delivered`.
  * Sets `signedOffAt = now()` — the 24-hour undo window + the eventual
  * 14-day stale-review release (Chunk A4) both read off this timestamp.
+ *
+ * Chunk F-prep: also sets `payoutScheduledFor = signedOffAt + 24h`,
+ * which the daily cron uses to fire the (mock) payout once the undo
+ * window closes. Decoupling intent (sign-off) from money movement
+ * (payout) means buyer's-remorse undo doesn't have to claw back a
+ * Stripe transfer.
  */
 export async function signOffProject(projectId: string) {
   const me = await requireUser();
@@ -69,9 +76,16 @@ export async function signOffProject(projectId: string) {
     throw new Error(`Cannot sign off from status "${project.status}"`);
   }
 
+  const now = new Date();
+  const payoutAt = new Date(now.getTime() + PAYOUT_DELAY_MS);
+
   await db.project.update({
     where: { id: projectId },
-    data: { status: "completed", signedOffAt: new Date() },
+    data: {
+      status: "completed",
+      signedOffAt: now,
+      payoutScheduledFor: payoutAt,
+    },
   });
 
   revalidatePath(`/project/${projectId}`);
@@ -99,7 +113,13 @@ export async function undoSignOff(projectId: string) {
 
   await db.project.update({
     where: { id: projectId },
-    data: { status: "delivered", signedOffAt: null },
+    data: {
+      status: "delivered",
+      signedOffAt: null,
+      // Cancel the scheduled payout — back to "delivered, awaiting
+      // approval." Re-signing later will re-schedule it.
+      payoutScheduledFor: null,
+    },
   });
 
   revalidatePath(`/project/${projectId}`);
@@ -207,6 +227,17 @@ export async function submitReview(args: {
 /**
  * Either party: cancel a non-final project. Status flows to `cancelled`
  * with `cancelledAt = now()`. Cannot be reversed.
+ *
+ * Chunk F-prep refund handling: if the project was already paid, the
+ * deposit is refunded (mock — sets `paidAt = null`). When Chunk
+ * F-stripe lands, this becomes a real `stripe.refunds.create(...)`
+ * call. Any pending payout is also cancelled.
+ *
+ * Edge case to watch: cancelling AFTER the creator delivered means
+ * the creator did the work but won't get paid. For v1 we accept that
+ * risk — both parties have to agree to cancel implicitly (either
+ * could refuse to mark delivered or refuse to sign off). Adding
+ * arbitration / partial refunds is a Chunk-G concern.
  */
 export async function cancelProject(projectId: string) {
   const me = await requireUser();
@@ -217,9 +248,18 @@ export async function cancelProject(projectId: string) {
 
   await db.project.update({
     where: { id: projectId },
-    data: { status: "cancelled", cancelledAt: new Date() },
+    data: {
+      status: "cancelled",
+      cancelledAt: new Date(),
+      // Mock refund: clear the payment. When Stripe is wired up
+      // (Chunk F-stripe), call stripe.refunds.create here too.
+      paidAt: null,
+      // Cancel any pending payout in flight.
+      payoutScheduledFor: null,
+    },
   });
 
   revalidatePath(`/project/${projectId}`);
+  revalidatePath("/projects");
   return { ok: true };
 }

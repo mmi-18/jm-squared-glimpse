@@ -7,6 +7,7 @@ import {
   Pencil,
   Send,
   Sparkles,
+  Wallet,
   XCircle,
 } from "lucide-react";
 import { Avatar } from "@/components/brand/avatar";
@@ -51,6 +52,12 @@ function attentionCopy(
     return {
       label: `${counterpartyName} accepted — your turn`,
       icon: Pencil,
+    };
+  }
+  if (reason === "your_turn_to_deposit") {
+    return {
+      label: "Both accepted — deposit to start",
+      icon: Wallet,
     };
   }
   // your_turn_to_sign_off

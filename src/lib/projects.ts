@@ -16,6 +16,7 @@ import { db } from "@/lib/db";
 
 export type AttentionReason =
   | "your_turn_to_accept"
+  | "your_turn_to_deposit"
   | "your_turn_to_sign_off";
 
 /**
@@ -23,18 +24,18 @@ export type AttentionReason =
  * Cheap COUNT query, fine to call from AppShell on every request.
  */
 export async function countNeedsAttention(userId: string): Promise<number> {
-  const [pendingMine, deliveredMine] = await Promise.all([
+  const [pendingMine, awaitingDepositMine, deliveredMine] = await Promise.all([
+    // pending: counterparty accepted, viewer hasn't
     db.project.count({
       where: {
         status: "pending",
+        paidAt: null,
         OR: [
-          // I'm the client and the creator already accepted but I haven't
           {
             clientId: userId,
             creatorAcceptedAt: { not: null },
             clientAcceptedAt: null,
           },
-          // I'm the creator and the client already accepted but I haven't
           {
             creatorId: userId,
             clientAcceptedAt: { not: null },
@@ -43,13 +44,24 @@ export async function countNeedsAttention(userId: string): Promise<number> {
         ],
       },
     }),
-    // delivered projects where I'm the client — I owe a sign-off
+    // pending + both-accepted + unpaid: viewer is the client and
+    // owes a deposit (Chunk F-prep)
+    db.project.count({
+      where: {
+        status: "pending",
+        clientId: userId,
+        clientAcceptedAt: { not: null },
+        creatorAcceptedAt: { not: null },
+        paidAt: null,
+      },
+    }),
+    // delivered: viewer is the client and owes sign-off
     db.project.count({
       where: { status: "delivered", clientId: userId },
     }),
   ]);
 
-  return pendingMine + deliveredMine;
+  return pendingMine + awaitingDepositMine + deliveredMine;
 }
 
 /**
@@ -90,10 +102,18 @@ function computeAttention(
     status: "pending" | "active" | "delivered" | "completed" | "cancelled";
     clientAcceptedAt: Date | null;
     creatorAcceptedAt: Date | null;
+    paidAt: Date | null;
   },
   role: "client" | "creator",
 ): AttentionReason | null {
   if (p.status === "pending") {
+    const bothAccepted =
+      p.clientAcceptedAt != null && p.creatorAcceptedAt != null;
+    // Both accepted, awaiting client's deposit (Chunk F-prep)
+    if (bothAccepted && p.paidAt == null && role === "client") {
+      return "your_turn_to_deposit";
+    }
+    // Counterparty has accepted, viewer hasn't
     if (
       role === "client" &&
       p.creatorAcceptedAt != null &&

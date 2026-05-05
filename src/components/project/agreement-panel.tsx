@@ -2,7 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, CheckCircle2, Clock, Loader2, Pencil } from "lucide-react";
+import {
+  Check,
+  CheckCircle2,
+  Clock,
+  Loader2,
+  Pencil,
+  Wallet,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,6 +22,7 @@ import { WorkAgreementForm } from "@/components/project/work-agreement-form";
 import {
   acceptAgreement,
   amendAgreement,
+  markProjectPaid,
   type AgreementInput,
 } from "@/app/(app)/project/agreement-actions";
 import type { UsageRights } from "@/lib/types";
@@ -60,6 +68,9 @@ export type AgreementSnapshot = {
   usageRights: UsageRights | null;
   clientAcceptedAt: Date | null;
   creatorAcceptedAt: Date | null;
+  /** Set when the client has deposited (Chunk F-prep). Both-accepted
+   *  + paidAt!=null is what flips status pending → active. */
+  paidAt: Date | null;
 };
 
 /**
@@ -144,6 +155,26 @@ export function AgreementPanel({
     });
   }
 
+  function onDeposit() {
+    setError(null);
+    startTransition(async () => {
+      const res = await markProjectPaid(projectId);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  // Chunk F-prep: both parties have accepted but the client hasn't
+  // paid the deposit yet. The agreement panel sticks around in this
+  // state so the deposit CTA has somewhere to live.
+  const bothAccepted =
+    agreement.clientAcceptedAt != null &&
+    agreement.creatorAcceptedAt != null;
+  const awaitingDeposit = bothAccepted && agreement.paidAt == null;
+
   async function onAmendSubmit(input: AgreementInput) {
     const res = await amendAgreement({ projectId, agreement: input });
     if (res.ok) {
@@ -162,11 +193,15 @@ export function AgreementPanel({
             Work agreement
           </p>
           <p className="mt-0.5 text-sm font-medium">
-            {viewerAcceptedAt && !counterAcceptedAt
-              ? `Waiting on ${counterName} to accept`
-              : !viewerAcceptedAt && counterAcceptedAt
-                ? `${counterName} accepted — your turn`
-                : "Drafting terms"}
+            {awaitingDeposit
+              ? viewerRole === "client"
+                ? "Both accepted — deposit to start"
+                : `Both accepted — waiting on ${clientName} to deposit`
+              : viewerAcceptedAt && !counterAcceptedAt
+                ? `Waiting on ${counterName} to accept`
+                : !viewerAcceptedAt && counterAcceptedAt
+                  ? `${counterName} accepted — your turn`
+                  : "Drafting terms"}
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -251,7 +286,39 @@ export function AgreementPanel({
           {error && (
             <p className="text-destructive mr-auto text-xs">{error}</p>
           )}
-          {!viewerAcceptedAt && (
+
+          {/* Deposit gate (Chunk F-prep): both parties have accepted,
+              now the client funds the project. The button only renders
+              for the client; the creator just sees the header status
+              ("Both accepted — waiting on …Client to deposit"). */}
+          {awaitingDeposit && viewerRole === "client" && (
+            <Button
+              size="sm"
+              onClick={onDeposit}
+              disabled={pending || agreement.priceCents == null}
+            >
+              {pending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Wallet className="h-3.5 w-3.5" />
+              )}
+              {pending
+                ? "Processing…"
+                : `Deposit ${
+                    agreement.priceCents != null
+                      ? new Intl.NumberFormat("en-IE", {
+                          style: "currency",
+                          currency: agreement.currency,
+                          minimumFractionDigits: 0,
+                        }).format((agreement.priceCents * 1.1) / 100)
+                      : "€0"
+                  } to start`}
+            </Button>
+          )}
+
+          {/* Pre-deposit phase: accept / amend / counter-propose. None
+              of these render once we're in the deposit phase. */}
+          {!awaitingDeposit && !viewerAcceptedAt && (
             <Button
               variant="outline"
               size="sm"
@@ -261,7 +328,7 @@ export function AgreementPanel({
               <Pencil className="h-3.5 w-3.5" /> Amend terms
             </Button>
           )}
-          {viewerAcceptedAt && !counterAcceptedAt && (
+          {!awaitingDeposit && viewerAcceptedAt && !counterAcceptedAt && (
             <Button
               variant="outline"
               size="sm"
@@ -271,7 +338,7 @@ export function AgreementPanel({
               <Pencil className="h-3.5 w-3.5" /> Counter-propose
             </Button>
           )}
-          {!viewerAcceptedAt && (
+          {!awaitingDeposit && !viewerAcceptedAt && (
             <Button
               size="sm"
               onClick={onAccept}

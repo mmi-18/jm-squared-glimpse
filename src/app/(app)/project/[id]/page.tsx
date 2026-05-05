@@ -8,6 +8,7 @@ import { ProjectActions } from "./project-actions";
 import { ReviewForm } from "./review-form";
 import { AgreementPanel } from "@/components/project/agreement-panel";
 import { PendingCancelRow } from "@/components/project/pending-cancel-row";
+import { PaymentStatusCard } from "@/components/project/payment-status-card";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -184,6 +185,19 @@ export default async function ProjectPage({
         </dl>
       </div>
 
+      {/* Money state widget (Chunk F-prep) — renders only when there's
+          something to say (deposit landed, payout scheduled, payout
+          released, or refunded). Hidden during pre-deposit pending. */}
+      <PaymentStatusCard
+        paidAt={project.paidAt}
+        payoutScheduledFor={project.payoutScheduledFor}
+        payoutReleasedAt={project.payoutReleasedAt}
+        cancelledAt={project.cancelledAt}
+        priceCents={project.priceCents}
+        currency={project.currency}
+        viewerRole={role}
+      />
+
       {/* Pending — show the work agreement (Chunk C). When status is
           pending, the project doesn't have its standard action bar
           yet — the agreement IS the action surface (accept / amend).
@@ -203,6 +217,7 @@ export default async function ProjectPage({
             usageRights: project.usageRights,
             clientAcceptedAt: project.clientAcceptedAt,
             creatorAcceptedAt: project.creatorAcceptedAt,
+            paidAt: project.paidAt,
           }}
           viewerRole={role}
           viewerCanEdit
