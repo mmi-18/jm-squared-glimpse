@@ -16,6 +16,7 @@
 /playwright-report
 /playwright/.cache
 /tests/e2e/.auth
+/.smoke
 
 # next.js
 /.next/
