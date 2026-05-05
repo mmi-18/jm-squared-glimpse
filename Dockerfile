@@ -72,9 +72,12 @@ COPY --from=builder --chown=node:node /app/prisma ./prisma
 COPY --chown=node:node scripts/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
-# Filesystem upload target. Bind-mounted from the host as a volume in
-# docker-compose so uploads survive container rebuilds.
-RUN mkdir -p /app/uploads && chown node:node /app/uploads
+# Filesystem upload target. The host volume is bind-mounted at
+# /app/public/uploads so Next.js serves uploaded files as static assets
+# under https://<host>/uploads/* automatically (no custom file-streaming
+# route needed). Pre-create the dir with correct ownership; the bind
+# mount overlays it at runtime.
+RUN mkdir -p /app/public/uploads && chown node:node /app/public/uploads
 
 USER node
 EXPOSE 3000

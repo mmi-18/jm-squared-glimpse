@@ -22,6 +22,7 @@ import {
   DELIVERABLE_TYPES,
   STYLE_DIMENSIONS,
 } from "@/lib/constants";
+import { uploadFile } from "@/lib/upload";
 import { createPost } from "@/app/(app)/new-post/actions";
 
 const TOTAL_STEPS = 3;
@@ -88,27 +89,47 @@ export function PostEditor({
   });
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   function set<K extends keyof State>(k: K, v: State[K]) {
     setState((s) => ({ ...s, [k]: v }));
   }
 
-  function addImagesFromFiles(files: FileList | File[] | null) {
+  /**
+   * Upload selected files to /api/upload (which writes them to
+   * /home/mario/glimpse/uploads on the host via the volume mount,
+   * served back as `/uploads/<uuid>.<ext>` static URLs). Used to ship
+   * actual files instead of stuffing base64 into the DB.
+   */
+  async function addImagesFromFiles(files: FileList | File[] | null) {
     if (!files) return;
     const arr = Array.from(files);
-    Promise.all(
-      arr.map(
-        (file) =>
-          new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.readAsDataURL(file);
-          }),
-      ),
-    ).then((urls) => {
-      setState((s) => ({ ...s, mediaUrls: [...s.mediaUrls, ...urls] }));
-    });
+    if (arr.length === 0) return;
+    setError(null);
+    setUploading(true);
+    try {
+      const results = await Promise.allSettled(arr.map((f) => uploadFile(f)));
+      const newUrls: string[] = [];
+      const errors: string[] = [];
+      for (const r of results) {
+        if (r.status === "fulfilled") newUrls.push(r.value.url);
+        else
+          errors.push(r.reason instanceof Error ? r.reason.message : "upload failed");
+      }
+      if (newUrls.length > 0) {
+        setState((s) => ({ ...s, mediaUrls: [...s.mediaUrls, ...newUrls] }));
+      }
+      if (errors.length > 0) {
+        setError(
+          errors.length === arr.length
+            ? errors[0]
+            : `${errors.length} of ${arr.length} uploads failed: ${errors[0]}`,
+        );
+      }
+    } finally {
+      setUploading(false);
+    }
   }
 
   function removeImage(index: number) {
@@ -170,6 +191,7 @@ export function PostEditor({
           set={set}
           onPickFiles={() => fileInputRef.current?.click()}
           onRemoveImage={removeImage}
+          uploading={uploading}
         />
       )}
       {step === 2 && <StepTwo state={state} set={set} />}
@@ -269,11 +291,13 @@ function StepOne({
   set,
   onPickFiles,
   onRemoveImage,
+  uploading,
 }: {
   state: State;
   set: <K extends keyof State>(k: K, v: State[K]) => void;
   onPickFiles: () => void;
   onRemoveImage: (i: number) => void;
+  uploading: boolean;
 }) {
   return (
     <div className="space-y-6">
@@ -304,10 +328,16 @@ function StepOne({
           <button
             type="button"
             onClick={onPickFiles}
-            className="border-border bg-muted/30 hover:bg-muted hover:border-foreground/30 text-muted-foreground hover:text-foreground flex aspect-square items-center justify-center rounded-xl border border-dashed transition-colors"
+            disabled={uploading}
+            className="border-border bg-muted/30 hover:bg-muted hover:border-foreground/30 text-muted-foreground hover:text-foreground flex aspect-square items-center justify-center rounded-xl border border-dashed transition-colors disabled:opacity-60"
           >
             <div className="flex flex-col items-center gap-1 text-xs">
-              {state.mediaUrls.length === 0 ? (
+              {uploading ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span>Uploading…</span>
+                </>
+              ) : state.mediaUrls.length === 0 ? (
                 <>
                   <ImageIcon className="h-5 w-5" />
                   <span>Add picture</span>
