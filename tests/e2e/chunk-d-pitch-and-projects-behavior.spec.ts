@@ -137,21 +137,30 @@ test("kiri pitches → voltfang accepts via /projects → active", async ({
     await voltfang.waitForURL(`**/project/${createdProjectId}`);
 
     // ════════════════════════════════════════════════════════════════
-    // 3. Voltfang accepts → status flips to active
+    // 3. Voltfang accepts → deposit + active is covered by F-prep
+    //    smoke. Chunk D's job is just to verify the pitch flow lands
+    //    on a project Voltfang can see and act on.
     // ════════════════════════════════════════════════════════════════
     await voltfang
       .getByRole("button", { name: /accept terms/i })
       .click();
-    await expect(voltfang.locator("body")).toContainText(/In progress/, {
+    // Both accepted now — awaiting deposit (status still pending)
+    await expect(voltfang.locator("body")).toContainText(/Both accepted/i, {
       timeout: 10_000,
     });
+    // The Deposit CTA should be visible to Voltfang (the client)
+    await expect(
+      voltfang.getByRole("button", { name: /^Deposit /i }),
+    ).toBeVisible();
 
-    // /projects should now show the project under "In progress" and
-    // the "Needs your attention" group should no longer mention this
-    // particular project (badge count drops by 1).
+    // /projects: the project is now under "Needs your attention" with
+    // the "your turn to deposit" reason — confirms the badge logic
+    // picks up the new state.
     await voltfang.goto("/projects");
-    await expect(voltfang.locator("body")).toContainText(/In progress/);
     await expect(voltfang.locator("body")).toContainText(PROJECT_TITLE);
+    await expect(voltfang.locator("body")).toContainText(
+      /Both accepted — deposit to start/i,
+    );
   } finally {
     await voltfangCtx.close();
     await kiriCtx.close();

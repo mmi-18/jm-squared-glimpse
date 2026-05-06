@@ -160,28 +160,32 @@ test("hire → kiri accepts → status flips to active", async ({ browser }) => 
     await expect(kiri.locator("body")).toContainText(/9:16/);
 
     // ════════════════════════════════════════════════════════════════
-    // 3. Kiri clicks Accept terms → status flips to active
+    // 3. Kiri clicks Accept terms → both-accepted, awaiting deposit
+    //    (Chunk F-prep added a deposit gate between both-accept and
+    //    active. Status flips to active only AFTER the client
+    //    deposits. The Chunk-C-specific assertion is just that the
+    //    handshake completed; the deposit + active flip is exercised
+    //    by the Chunk F-prep smoke.)
     // ════════════════════════════════════════════════════════════════
     await kiri.getByRole("button", { name: /accept terms/i }).click();
 
-    // The agreement panel should disappear; status pill should now
-    // read "In progress" (the active label).
-    await expect(kiri.locator("body")).toContainText(/In progress/, {
+    // Header should now read "Both accepted — waiting on … to deposit"
+    await expect(kiri.locator("body")).toContainText(/Both accepted/i, {
       timeout: 10_000,
     });
+    // Kiri (creator) shouldn't see Accept Terms anymore (she already did)
     await expect(
       kiri.getByRole("button", { name: /accept terms/i }),
     ).toHaveCount(0);
+    // Status pill is still Pending until the deposit lands
+    await expect(kiri.locator("body")).toContainText(/Pending/);
 
-    // The Mark as delivered button (creator-side, active state) should
-    // now be available — proves the state machine flipped through.
-    await expect(
-      kiri.getByRole("button", { name: /mark as delivered/i }),
-    ).toBeVisible();
-
-    // Voltfang refreshes and sees the same active state
+    // Voltfang refreshes and sees the deposit CTA (proves both
+    // acceptances landed — only client sees the Deposit button)
     await voltfang.goto(`/project/${createdProjectId}`);
-    await expect(voltfang.locator("body")).toContainText(/In progress/);
+    await expect(
+      voltfang.getByRole("button", { name: /^Deposit /i }),
+    ).toBeVisible({ timeout: 10_000 });
   } finally {
     await voltfangCtx.close();
     await kiriCtx.close();

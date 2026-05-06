@@ -28,7 +28,12 @@ const PROJECT_TITLE = `[chunk-f-smoke ${STAMP}] Brand film with deposit`;
 let createdProjectId: string | null = null;
 
 test.describe.configure({ mode: "serial" });
-test.setTimeout(180_000);
+// 240s — F-prep is the longest behavior smoke (full pipeline +
+// direct DB poke + cron HTTP call). On free-tier Neon, every page
+// navigation can trigger an autosuspend wake (~5-15s); across the
+// ~16 navigations in this test that adds up. Bump generous so a
+// cold compute doesn't fail us spuriously.
+test.setTimeout(240_000);
 
 test.afterAll(async () => {
   const db = new PrismaClient();
