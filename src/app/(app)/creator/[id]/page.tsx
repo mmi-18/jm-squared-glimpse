@@ -119,10 +119,24 @@ export default async function CreatorProfilePage({
 
   // Match score if viewer is a startup
   let matchScore: number | null = null;
+  // Viewer-startup's active briefs — passed into the Hire dialog so
+  // they can pre-fill the agreement form from a posted job. Empty
+  // for non-startup viewers; the dialog falls back to a blank form.
+  let viewerActiveBriefs: Array<{
+    id: string;
+    title: string;
+    description: string;
+  }> = [];
   if (currentUser && currentUser.userType === "startup" && profile) {
-    const startupProfile = await db.startupProfile.findUnique({
-      where: { userId: currentUser.id },
-    });
+    const [startupProfile, briefs] = await Promise.all([
+      db.startupProfile.findUnique({ where: { userId: currentUser.id } }),
+      db.brief.findMany({
+        where: { userId: currentUser.id, active: true },
+        select: { id: true, title: true, description: true },
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+    viewerActiveBriefs = briefs;
     if (startupProfile) {
       const res = calculateMatchScore({
         creator: profile,
@@ -278,6 +292,7 @@ export default async function CreatorProfilePage({
                     creatorId={user.id}
                     creatorName={user.name ?? "this creator"}
                     isAuthenticated={!!currentUser}
+                    activeBriefs={viewerActiveBriefs}
                   />
                 )}
               </>
