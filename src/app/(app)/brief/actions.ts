@@ -139,7 +139,9 @@ export async function getTopMatchesForViewer(
   const me = await requireUser();
   if (me.userType !== "startup") return [];
 
-  const { calculateMatchScore } = await import("@/lib/matching");
+  const { calculateMatchScore, industrySimilarity } = await import(
+    "@/lib/matching"
+  );
 
   const [startupProfile, creatorProfiles, users, industryTable, posts] =
     await Promise.all([
@@ -150,18 +152,44 @@ export async function getTopMatchesForViewer(
       db.post.findMany({
         where: { postType: "portfolio_piece" },
         orderBy: { createdAt: "desc" },
-        select: { id: true, userId: true, mediaUrls: true, thumbnailUrl: true },
+        select: {
+          id: true,
+          userId: true,
+          industry: true,
+          mediaUrls: true,
+          thumbnailUrl: true,
+          createdAt: true,
+        },
       }),
     ]);
 
   if (!startupProfile) return [];
 
   const userMap = new Map(users.map((u) => [u.id, u]));
+  const startupIndustry = startupProfile.industry?.toLowerCase() ?? null;
+
+  // Rank each creator's posts by industry relevance to the startup,
+  // then recency. The "hero" post for a result card is the top of
+  // this list — so a sustainability-tagged shot beats a recent
+  // luxury_lifestyle one for a sustainability startup. Pure recency
+  // is the fallback when no post matches.
   const postsByCreator = new Map<string, typeof posts>();
   for (const p of posts) {
     const arr = postsByCreator.get(p.userId) ?? [];
     arr.push(p);
     postsByCreator.set(p.userId, arr);
+  }
+  for (const [, list] of postsByCreator) {
+    list.sort((a, b) => {
+      const aRel = startupIndustry
+        ? industrySimilarity([a.industry ?? ""], startupIndustry, industryTable)
+        : 0;
+      const bRel = startupIndustry
+        ? industrySimilarity([b.industry ?? ""], startupIndustry, industryTable)
+        : 0;
+      if (aRel !== bRel) return bRel - aRel;
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    });
   }
 
   type Scored = {
@@ -175,6 +203,10 @@ export async function getTopMatchesForViewer(
     if (profile.userId === me.id) continue; // can't match yourself
     const user = userMap.get(profile.userId);
     if (!user) continue;
+    // Soft mode: skip the null-on-hard-filter-fail return so every
+    // creator gets ranked. The result panel always wants 3 picks —
+    // strict mode (used by /feed) would silently drop most candidates
+    // and leave us with 1-2.
     const res = calculateMatchScore({
       creator: profile,
       startup: startupProfile,
@@ -187,6 +219,7 @@ export async function getTopMatchesForViewer(
         culturalMarkets: me.culturalMarkets ?? [],
       },
       industryTable,
+      softMode: true,
     });
     if (res) scored.push({ profile, user, matchScore: res.totalScore });
   }

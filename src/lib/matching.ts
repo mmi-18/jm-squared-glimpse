@@ -157,10 +157,28 @@ export type MatchInput = {
   creatorUser: { languages?: string[] | null; culturalMarkets?: string[] | null };
   startupUser: { languages?: string[] | null; culturalMarkets?: string[] | null };
   industryTable: IndustrySimilarity[];
+  /**
+   * Soft mode (Brief results context).
+   *
+   * Default behavior (`softMode: false`) drops creators that fail any
+   * hard filter (budget / location / language / discipline / negative
+   * preference) by returning null — they shouldn't appear on /feed
+   * because they're not feasible matches.
+   *
+   * Soft mode skips the null return: every creator is scored, hard
+   * filters still affect the breakdown but don't disqualify. Used by
+   * the post-brief "top 3 picks" reveal where we always want to surface
+   * the best-ranked creators, even if budget / discipline isn't a
+   * perfect fit (the startup can ask + negotiate). Negative-preference
+   * fails still drop (those are creator-side hard "won't do this work"
+   * signals — surfacing them anyway would waste both parties' time).
+   */
+  softMode?: boolean;
 };
 
 export function calculateMatchScore(input: MatchInput): MatchBreakdown | null {
   const { creator, startup, creatorUser, startupUser, industryTable } = input;
+  const softMode = input.softMode ?? false;
 
   const cStyle = getStyleArray(creator);
   const sStyle = getStyleArray(startup);
@@ -178,9 +196,15 @@ export function calculateMatchScore(input: MatchInput): MatchBreakdown | null {
 
   const hardFilterPassed = budgetOk && locOk && langOk && discOk && !negFail;
 
-  // Override rule: style > 0.9 bypasses partial hard-filter fails (but not negative preference)
+  // In strict mode (the /feed default), drop creators that fail any
+  // hard filter unless their style is exceptional enough to override.
+  // In soft mode (brief results), the only true disqualifier is the
+  // creator's *own* negative preference — every other failure becomes
+  // a scoring penalty rather than an outright drop.
   if (!hardFilterPassed) {
-    if (!(styleScore > 0.9 && !negFail)) {
+    if (softMode) {
+      if (negFail) return null;
+    } else if (!(styleScore > 0.9 && !negFail)) {
       return null;
     }
   }

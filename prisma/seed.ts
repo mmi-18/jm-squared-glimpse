@@ -22,18 +22,19 @@ const db = new PrismaClient();
 
 const VOLTFANG_EMAIL = "voltfang@seed.glimpse.app";
 const VOLTFANG_BRIEF_TITLE =
-  "Series-A launch film — Q3 product reveal";
-const VOLTFANG_BRIEF_DESCRIPTION = `We're announcing our Series A in early Q3 — looking for a creator to shoot and edit a 60-second hero film for the product page + cutdowns for paid social.
+  "Installation film series — H2 sustainability launch";
+const VOLTFANG_BRIEF_DESCRIPTION = `We're rolling out our next-gen residential battery system across DACH and Benelux this autumn and need a film series that shows the system *in the wild* — not a sterile product render.
 
-Tone: confident, energetic, slightly cinematic. Think Linear's launch films, not corporate sizzle. Shot on location at our Berlin office + warehouse, ideally in golden-hour daylight.
+Tone: confident, technical, slightly warm. Think Volvo's recent EV documentaries and Linear's launch films — clean exteriors, daylight, real installer hands at work, customers checking the dashboard on their phone. No corporate sizzle, no stock-music montages.
 
 Deliverables we'd want at hand-off:
-- 1× 60-second hero, 16:9 (web)
-- 1× 60-second hero, 9:16 (Instagram, TikTok)
-- 3× 15-second cutdowns, 9:16
-- Raw footage + project files (so we can iterate later)
+- 1× 2-3 minute hero film for the product page (long-form story)
+- 2-3 cutdowns for LinkedIn + YouTube (60-90s each)
+- Raw footage + project files so we can repurpose later
 
-We've got a rough storyboard and reference reel; happy to share once we connect. Open to your creative direction — the storyboard is a starting point, not a script.`;
+Locations: our Aachen HQ + 2-3 real installation sites across Germany and the Netherlands (we'll line up the access). Open to your creative direction — we have a rough storyboard but it's a starting point, not a script.
+
+Audience: installers, B2B procurement teams, sustainability-minded homeowners. Not Gen-Z TikTok.`;
 
 const PAIRS: Array<[string, string, number]> = [
   ["outdoor_sport", "travel_adventure", 0.85],
@@ -104,17 +105,21 @@ async function seedVoltfangBrief() {
   // "Video + IG/TikTok/LinkedIn/Website + 3-5 cuts + 30-60s" archetype.
   // Real values so the Hire-from-brief picker has interesting prefill
   // material to show in the demo.
+  // Coherent with the brief copy above: B2B sustainability film series.
+  // Longer-form (1-3 min) for product-page + YouTube, not social-short.
+  // Skips IG/TikTok deliberately — Voltfang's audience is installers
+  // and procurement, not Gen-Z social. Platforms picked to match.
   const briefStructuredFields = {
     deliverableMedium: "video" as const,
     deliverablePlatforms: [
-      "instagram",
-      "tiktok",
       "linkedin",
+      "youtube",
       "website",
-    ] as ("instagram" | "tiktok" | "linkedin" | "website")[],
-    deliverableCountMin: 3,
-    deliverableCountMax: 5,
-    deliverableDuration: "from_30_to_60s" as const,
+      "internal",
+    ] as ("linkedin" | "youtube" | "website" | "internal")[],
+    deliverableCountMin: 2,
+    deliverableCountMax: 4,
+    deliverableDuration: "from_1_to_3_min" as const,
   };
 
   // Idempotent brief seed: find by (userId, title) — if it exists,
