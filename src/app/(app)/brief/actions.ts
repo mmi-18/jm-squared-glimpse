@@ -226,6 +226,23 @@ export async function getTopMatchesForViewer(
 
   scored.sort((a, b) => b.matchScore - a.matchScore);
 
+  // Display boost for the brief-results panel only.
+  //
+  // The raw composite score (style*0.30 + industry*0.20 + skill*0.15
+  // + venture*0.10 + equipment*0.05 + personal*0.10 + reputation*0.10)
+  // tops out around 0.65-0.70 even for strong matches on our current
+  // seed pool — `reputation` alone caps style-perfect-but-unrated
+  // creators at ~0.85. That reads as "soft fit" in the UI when the
+  // matching actually intends to surface these as top picks.
+  //
+  // Apply a +15 percentage-point bump, capped at 95%, only on the
+  // result cards. Preserves relative ranking; the /feed Featured
+  // surface and the post-match score on /creator/<id> still use the
+  // raw value.
+  function boostForDisplay(raw: number): number {
+    return Math.min(0.95, raw + 0.15);
+  }
+
   return scored.slice(0, limit).map((s) => ({
     userId: s.user.id,
     name: s.user.name,
@@ -237,7 +254,7 @@ export async function getTopMatchesForViewer(
     avgRating:
       s.profile.avgRating != null ? Number(s.profile.avgRating) : null,
     reviewCount: s.profile.reviewCount,
-    matchScore: s.matchScore,
+    matchScore: boostForDisplay(s.matchScore),
     posts: (postsByCreator.get(s.user.id) ?? []).slice(0, 3).map((p) => ({
       id: p.id,
       mediaUrls: p.mediaUrls ?? [],
