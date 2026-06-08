@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import {
   ArrowRight,
   Check,
@@ -189,12 +188,19 @@ function CreatorMatchCard({
     <article className="border-border bg-card group flex flex-col overflow-hidden rounded-3xl border transition-all hover:border-foreground/30 hover:shadow-lg">
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
         {heroSrc ? (
-          <Image
+          // Using plain <img> instead of next/image — Next 16's image
+          // optimizer rejects nbg1.your-objectstorage.com URLs at
+          // runtime despite next.config.ts's remotePatterns being
+          // syntactically correct. Manifest + matcher both say match;
+          // the optimizer still 400s with "url parameter is not
+          // allowed." Pragmatic fix: bypass /_next/image, eat the
+          // (small) loss of webp conversion + responsive srcset.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
             src={heroSrc}
             alt={`${match.name ?? "Creator"} hero`}
-            fill
-            className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-            sizes="(max-width: 768px) 100vw, 33vw"
+            loading="lazy"
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
           />
         ) : (
           <div className="from-warm via-surface to-background flex h-full items-center justify-center bg-gradient-to-br">

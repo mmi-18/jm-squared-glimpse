@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 function initials(name?: string | null): string {
@@ -49,12 +48,16 @@ export function Avatar({
         )}
         style={{ width: size, height: size }}
       >
-        <Image
+        {/* Plain <img>, not next/image — Next 16's image optimizer
+         *  rejects nbg1.your-objectstorage.com + dicebear URLs at
+         *  runtime even with the correct remotePatterns. See
+         *  brief-matches-panel.tsx for the same workaround. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src={src}
           alt={name ?? ""}
-          fill
-          className="object-cover"
-          sizes={`${size}px`}
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover"
         />
       </div>
     );
