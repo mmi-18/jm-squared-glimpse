@@ -13,15 +13,31 @@ const nextConfig: NextConfig = {
     contentSecurityPolicy:
       "default-src 'self'; script-src 'none'; sandbox;",
     remotePatterns: [
+      // Next.js 16 tightened remotePatterns: omitting `pathname`
+      // makes the optimizer reject every URL with HTTP 400
+      // "url parameter is not allowed". Always include `pathname:
+      // "/**"` to keep behavior equivalent to the old default.
       // Identicons during onboarding before the user uploads an avatar.
-      { protocol: "https", hostname: "api.dicebear.com" },
+      {
+        protocol: "https",
+        hostname: "api.dicebear.com",
+        pathname: "/**",
+      },
       // QR-code generator used on the share-profile screen.
-      { protocol: "https", hostname: "api.qrserver.com" },
-      // Hetzner Object Storage — user-uploaded post images / future
-      // delivery files. Match the NBG1 endpoint we point at in
-      // src/lib/s3.ts. If we ever switch regions, add the new host
+      {
+        protocol: "https",
+        hostname: "api.qrserver.com",
+        pathname: "/**",
+      },
+      // Hetzner Object Storage — user-uploaded post images, delivery
+      // files, and seed images. Match the NBG1 endpoint we point at
+      // in src/lib/s3.ts. If we ever switch regions, add the new host
       // here too.
-      { protocol: "https", hostname: "nbg1.your-objectstorage.com" },
+      {
+        protocol: "https",
+        hostname: "nbg1.your-objectstorage.com",
+        pathname: "/**",
+      },
     ],
   },
 };
