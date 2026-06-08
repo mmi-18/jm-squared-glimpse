@@ -120,11 +120,6 @@ export function TopNav({
                   New post
                 </Link>
               )}
-              {user.membershipTier === "pro" && (
-                <span className="bg-foreground text-background rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider">
-                  Pro
-                </span>
-              )}
               {/* Profile pill — subtle button affordance so the click
                   target reads as interactive (was just plain text, which
                   users tended to overlook and misclick the SignOut icon

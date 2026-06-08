@@ -126,13 +126,27 @@ export default async function CreatorProfilePage({
     id: string;
     title: string;
     description: string;
+    deliverableMedium: string | null;
+    deliverablePlatforms: string[];
+    deliverableCountMin: number | null;
+    deliverableCountMax: number | null;
+    deliverableDuration: string | null;
   }> = [];
   if (currentUser && currentUser.userType === "startup" && profile) {
     const [startupProfile, briefs] = await Promise.all([
       db.startupProfile.findUnique({ where: { userId: currentUser.id } }),
       db.brief.findMany({
         where: { userId: currentUser.id, active: true },
-        select: { id: true, title: true, description: true },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          deliverableMedium: true,
+          deliverablePlatforms: true,
+          deliverableCountMin: true,
+          deliverableCountMax: true,
+          deliverableDuration: true,
+        },
         orderBy: { createdAt: "desc" },
       }),
     ]);

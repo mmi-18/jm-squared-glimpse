@@ -22,7 +22,82 @@ type BriefOption = {
   id: string;
   title: string;
   description: string;
+  deliverableMedium: string | null;
+  deliverablePlatforms: string[];
+  deliverableCountMin: number | null;
+  deliverableCountMax: number | null;
+  deliverableDuration: string | null;
 };
+
+const MEDIUM_LABEL: Record<string, string> = {
+  photo: "Photo",
+  video: "Video",
+  to_be_determined: "TBD",
+};
+
+const PLATFORM_LABEL: Record<string, string> = {
+  instagram: "Instagram",
+  tiktok: "TikTok",
+  youtube: "YouTube",
+  linkedin: "LinkedIn",
+  website: "Website",
+  event: "Event",
+  cinema: "Cinema",
+  internal: "Internal",
+  to_be_determined: "TBD",
+};
+
+const DURATION_LABEL: Record<string, string> = {
+  under_15s: "<15s",
+  from_15_to_30s: "15–30s",
+  from_30_to_60s: "30–60s",
+  from_1_to_3_min: "1–3 min",
+  over_3_min: "3+ min",
+  not_applicable: "n/a",
+};
+
+/**
+ * Turn a structured Brief into a human-readable deliverables string
+ * suitable as the pre-fill for the agreement form's "deliverables"
+ * field. Pattern (skipping unset pieces gracefully):
+ *
+ *   "3-5 Video for Instagram, TikTok (30-60s)"
+ *   "10 Photo for Website"
+ *   "Quantity TBD"
+ */
+function synthesizeDeliverables(b: BriefOption): string {
+  const parts: string[] = [];
+
+  // Count: "3" or "3-5" depending on range
+  if (b.deliverableCountMin != null && b.deliverableCountMax != null) {
+    parts.push(
+      b.deliverableCountMin === b.deliverableCountMax
+        ? `${b.deliverableCountMin}`
+        : `${b.deliverableCountMin}-${b.deliverableCountMax}`,
+    );
+  }
+
+  // Medium: "Video" / "Photo"
+  if (b.deliverableMedium && MEDIUM_LABEL[b.deliverableMedium]) {
+    parts.push(MEDIUM_LABEL[b.deliverableMedium]);
+  }
+
+  // Platforms: "for Instagram, TikTok"
+  if (b.deliverablePlatforms.length > 0) {
+    const labels = b.deliverablePlatforms
+      .map((p) => PLATFORM_LABEL[p])
+      .filter(Boolean)
+      .join(", ");
+    if (labels) parts.push(`for ${labels}`);
+  }
+
+  // Duration: "(30-60s)" — bracketed at the end
+  if (b.deliverableDuration && DURATION_LABEL[b.deliverableDuration]) {
+    parts.push(`(${DURATION_LABEL[b.deliverableDuration]})`);
+  }
+
+  return parts.join(" ").trim();
+}
 
 /**
  * "Hire <creator>" entry point. Opens a modal with the structured
@@ -90,12 +165,19 @@ export function HireDialog({
 
   const sourceBrief = activeBriefs.find((b) => b.id === sourceBriefId) ?? null;
 
-  // Pre-fill values when a brief is picked. Title → title, description
-  // → scope (free-text → free-text). Other agreement fields (price /
-  // deadline / revisions / usage rights) have no direct mapping in
-  // the Brief schema today, so they stay at their form defaults.
+  // Pre-fill values when a brief is picked. Brief → agreement mapping:
+  //   title          → title
+  //   description    → scope (free-text → free-text)
+  //   structured     → deliverables (synthesized human-readable string
+  //                    from medium / platforms / count / duration)
+  // Other agreement fields (price / deadline / revisions / usage rights)
+  // have no direct mapping yet — startup fills them in.
   const initialFromBrief: Partial<AgreementInput> | undefined = sourceBrief
-    ? { title: sourceBrief.title, scope: sourceBrief.description }
+    ? {
+        title: sourceBrief.title,
+        scope: sourceBrief.description,
+        deliverables: synthesizeDeliverables(sourceBrief),
+      }
     : undefined;
 
   return (

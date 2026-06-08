@@ -489,15 +489,60 @@ model Brief {
   id                 String   @id @default(cuid())
   userId             String
   title              String
+  // Context & description — free-text. Renamed in the UI; column
+  // kept as `description` to avoid a rename migration.
   description        String
   referenceImageUrls String[] @default([])
   active             Boolean  @default(true)
   createdAt          DateTime @default(now()) @db.Timestamptz
 
+  // ─── Structured deliverable spec (added with the brief redesign) ──
+  // One brief = one deliverable spec. Multi-type briefs split into
+  // multiple briefs (rare; can revisit later if user feedback demands).
+  // Nullable so legacy briefs (pre-redesign) keep working without
+  // backfill — the composer treats null as "not yet specified."
+  deliverableMedium    DeliverableMedium?
+  // Multi-platform on purpose: one 9:16 video often runs on IG + TikTok
+  // + Reels simultaneously. Storing the full list keeps that intent.
+  deliverablePlatforms DeliverablePlatform[] @default([])
+  // Quantity range (e.g. "3-5 short cuts"). countMin <= countMax,
+  // enforced in the action. Equal values = single fixed quantity.
+  deliverableCountMin  Int?
+  deliverableCountMax  Int?
+  // Only meaningful when medium=video. Photo / TBD → leave null.
+  deliverableDuration  DurationBucket?
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([active])
+}
+
+enum DeliverableMedium {
+  photo
+  video
+  to_be_determined
+}
+
+enum DeliverablePlatform {
+  instagram
+  tiktok
+  youtube
+  linkedin
+  website
+  event
+  cinema
+  internal
+  to_be_determined
+}
+
+enum DurationBucket {
+  under_15s
+  from_15_to_30s
+  from_30_to_60s
+  from_1_to_3_min
+  over_3_min
+  not_applicable
 }
 
 // ════════════════════════════════════════════════════════════════════════════

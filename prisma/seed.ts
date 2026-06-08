@@ -100,10 +100,26 @@ async function seedVoltfangBrief() {
     console.log(`[seed] Upgraded ${VOLTFANG_EMAIL} to Pro`);
   }
 
+  // Voltfang's deliverable spec — a Series-A launch film fits the
+  // "Video + IG/TikTok/LinkedIn/Website + 3-5 cuts + 30-60s" archetype.
+  // Real values so the Hire-from-brief picker has interesting prefill
+  // material to show in the demo.
+  const briefStructuredFields = {
+    deliverableMedium: "video" as const,
+    deliverablePlatforms: [
+      "instagram",
+      "tiktok",
+      "linkedin",
+      "website",
+    ] as ("instagram" | "tiktok" | "linkedin" | "website")[],
+    deliverableCountMin: 3,
+    deliverableCountMax: 5,
+    deliverableDuration: "from_30_to_60s" as const,
+  };
+
   // Idempotent brief seed: find by (userId, title) — if it exists,
-  // refresh the description in case we tweak the wording; if not,
-  // create. Other (manually-authored) briefs on Voltfang stay
-  // untouched.
+  // refresh content in case we tweak the wording or structured spec;
+  // if not, create. Other (manually-authored) briefs stay untouched.
   const existing = await db.brief.findFirst({
     where: { userId: voltfang.id, title: VOLTFANG_BRIEF_TITLE },
     select: { id: true },
@@ -111,13 +127,14 @@ async function seedVoltfangBrief() {
   if (existing) {
     await db.brief.update({
       where: { id: existing.id },
-      data: { description: VOLTFANG_BRIEF_DESCRIPTION, active: true },
+      data: {
+        description: VOLTFANG_BRIEF_DESCRIPTION,
+        active: true,
+        ...briefStructuredFields,
+      },
     });
     console.log(`[seed] Refreshed Voltfang brief (${existing.id})`);
   } else {
-    // Mark any other active briefs inactive so the new one is the
-    // single active brief — matches the /brief composer's
-    // one-active-at-a-time invariant.
     await db.brief.updateMany({
       where: { userId: voltfang.id, active: true },
       data: { active: false },
@@ -128,6 +145,7 @@ async function seedVoltfangBrief() {
         title: VOLTFANG_BRIEF_TITLE,
         description: VOLTFANG_BRIEF_DESCRIPTION,
         active: true,
+        ...briefStructuredFields,
       },
     });
     console.log(`[seed] Created Voltfang brief (${created.id})`);

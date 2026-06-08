@@ -73,16 +73,12 @@ export default async function BriefPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 md:px-6">
       <div className="mb-8">
-        <div className="bg-warm inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium">
-          <Sparkles className="h-3.5 w-3.5" /> Pro feature
-        </div>
-        <h1 className="mt-3 text-3xl font-medium tracking-tight">
+        <h1 className="text-3xl font-medium tracking-tight">
           Your project brief
         </h1>
         <p className="text-muted-foreground mt-2 text-sm">
-          Describe what you&apos;re looking for. Creators whose work fits will
-          be flagged as <span className="font-medium">Top picks</span> in your
-          feed.
+          Tell us what you need. We&apos;ll surface the creators whose style,
+          industry, and deliverable fit are closest — ranked.
         </p>
       </div>
 
@@ -93,6 +89,11 @@ export default async function BriefPage() {
                 title: activeBrief.title,
                 description: activeBrief.description,
                 referenceUrls: activeBrief.referenceImageUrls ?? [],
+                deliverableMedium: activeBrief.deliverableMedium,
+                deliverablePlatforms: activeBrief.deliverablePlatforms,
+                deliverableCountMin: activeBrief.deliverableCountMin,
+                deliverableCountMax: activeBrief.deliverableCountMax,
+                deliverableDuration: activeBrief.deliverableDuration,
               }
             : null
         }
